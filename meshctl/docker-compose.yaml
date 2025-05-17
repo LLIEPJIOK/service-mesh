@@ -1,0 +1,17 @@
+services:
+  app:
+    container_name: app
+    build: .
+    networks:
+      - app_network
+  
+  mesh:
+    container_name: mesh
+    image: docker.io/lliepjiok/mesh:latest
+    networks:
+      - app_network
+
+
+networks:
+  app_network:
+    driver: bridge
