@@ -1,0 +1,7 @@
+app:
+  terminate_timeout: 5s
+  shutdown_timeout: 2s
+plane:
+  url: :8080
+  read_timeout: 1s
+  read_header_timeout: 1s

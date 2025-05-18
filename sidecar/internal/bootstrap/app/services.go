@@ -9,6 +9,9 @@ import (
 	"sync"
 
 	"github.com/LLIEPJIOK/sidecar/internal/app/http/sidecar"
+	"github.com/LLIEPJIOK/sidecar/pkg/middleware"
+	"github.com/LLIEPJIOK/sidecar/pkg/middleware/ratelimiter"
+	raterepository "github.com/LLIEPJIOK/sidecar/pkg/middleware/ratelimiter/repository"
 )
 
 type runService = func(ctx context.Context, stop context.CancelFunc, wg *sync.WaitGroup)
@@ -24,7 +27,7 @@ func (a *App) runMesh(ctx context.Context, stop context.CancelFunc, wg *sync.Wai
 	defer stop()
 	defer slog.Info("proxy stopped")
 
-	sc, err := sidecar.New(&a.cfg.Proxy)
+	sc, err := sidecar.New(a.cfg)
 	if err != nil {
 		slog.Error("failed to create proxy", slog.Any("error", err))
 
@@ -34,11 +37,14 @@ func (a *App) runMesh(ctx context.Context, stop context.CancelFunc, wg *sync.Wai
 	mux := http.NewServeMux()
 	sc.RegisterRoutes(mux)
 
+	repo := raterepository.NewInMemory()
+	rateLimiter := ratelimiter.NewSlidingWindow(repo, &a.cfg.RateLimiter)
+
 	httpServer := &http.Server{
-		Addr:              fmt.Sprintf(":%d", a.cfg.Proxy.Port),
-		Handler:           mux,
-		ReadTimeout:       a.cfg.Proxy.ReadTimeout,
-		ReadHeaderTimeout: a.cfg.Proxy.ReadHeaderTimeout,
+		Addr:              fmt.Sprintf(":%d", a.cfg.SideCar.Port),
+		Handler:           middleware.Wrap(mux, rateLimiter),
+		ReadTimeout:       a.cfg.SideCar.ReadTimeout,
+		ReadHeaderTimeout: a.cfg.SideCar.ReadHeaderTimeout,
 	}
 
 	go func() {

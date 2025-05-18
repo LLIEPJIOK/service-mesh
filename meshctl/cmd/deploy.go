@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/google/uuid"
@@ -21,11 +22,13 @@ func init() {
 	deployCmd.Flags().StringP("name", "n", "", "Name of application")
 	deployCmd.Flags().StringP("dockerfile", "d", "", "Path to dockerfile file")
 	deployCmd.Flags().IntP("replicas", "r", 1, "Count of replicas to be up")
+	deployCmd.Flags().StringP("config", "c", "", "Config for sidecar")
 	rootCmd.AddCommand(deployCmd)
 }
 
 func deploy(cmd *cobra.Command, args []string) error {
 	dockerfile := cmd.Flag("dockerfile").Value.String()
+	config := cmd.Flag("config").Value.String()
 	name := getAppName(cmd)
 
 	replicas, err := cmd.Flags().GetInt("replicas")
@@ -45,7 +48,7 @@ func deploy(cmd *cobra.Command, args []string) error {
 	}
 
 	for i := range replicas {
-		if err := up(name, i+1); err != nil {
+		if err := up(name, config, i+1); err != nil {
 			return err
 		}
 	}
@@ -55,8 +58,7 @@ func deploy(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func up(name string, idx int) error {
-
+func up(name, config string, idx int) error {
 	cont := name
 	if idx > 1 {
 		cont += fmt.Sprintf("-%d", idx)
@@ -65,17 +67,27 @@ func up(name string, idx int) error {
 	// Run the 'sidecar' container
 	slog.Info("Starting container: sidecar...", slog.Int("idx", idx))
 
-	err := run(
-		"docker", "run", "-d",
-		"--name", cont+"-sidecar",
+	envs, err := getEnvs(config, defaultSidecarConfig)
+	if err != nil {
+		return err
+	}
+
+	params := []string{
+		"run", "-d",
+		"--name", cont + "-sidecar",
 		"--network", "mesh_network",
-		"--env-file", ".env",
-		"-e", fmt.Sprintf("PROXY_TARGET=%s:8080", cont),
-		"-e", "PROXY_SERVICE_NAME="+cont,
+		"-e", fmt.Sprintf("SIDECAR_TARGET=%s:8080", cont),
+		"-e", "SIDECAR_SERVICE_NAME=" + cont,
+	}
+	params = append(params, envs...)
+	params = append(
+		params,
 		"--label", "com.docker.compose.project=control-plane",
 		"--label", "com.docker.compose.service=name"+"-sidecar",
 		"lliepjiok/sidecar:latest",
 	)
+
+	err = run("docker", params...)
 	if err != nil {
 		return fmt.Errorf("error running mesh: %w", err)
 	}
@@ -87,7 +99,6 @@ func up(name string, idx int) error {
 		"docker", "run", "-d",
 		"--name", cont,
 		"--network", "mesh_network",
-		"--env-file", ".env",
 		"-e", fmt.Sprintf("HTTP_PROXY=http://%s-sidecar:8080", cont),
 		"-e", fmt.Sprintf("HTTPS_PROXY=http://%s-sidecar:8080", cont),
 		"--label", "com.docker.compose.project=control-plane",
@@ -119,6 +130,35 @@ func up(name string, idx int) error {
 	}
 
 	return nil
+}
+
+func getEnvs(config string, def string) ([]string, error) {
+	var (
+		data []byte
+		err  error
+	)
+
+	if config != "" {
+		data, err = os.ReadFile(config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read file: %w", err)
+		}
+	} else {
+		data = []byte(def)
+	}
+
+	mp, err := ParseToEnvMap(data)
+	if err != nil {
+		return nil, err
+	}
+
+	params := make([]string, 0, 2*len(mp))
+
+	for k, v := range mp {
+		params = append(params, "-e", fmt.Sprintf("%s=%s", k, v))
+	}
+
+	return params, nil
 }
 
 func getAppName(cmd *cobra.Command) string {

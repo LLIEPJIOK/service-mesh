@@ -9,7 +9,7 @@ import (
 
 type Config struct {
 	App   App          `envPrefix:"APP_"`
-	Proxy ControlPlane `envPrefix:"PROXY_"`
+	Plane ControlPlane `envPrefix:"PLANE_"`
 }
 
 type App struct {

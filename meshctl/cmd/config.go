@@ -1,0 +1,62 @@
+package cmd
+
+const (
+	defaultSidecarConfig = `
+app:
+  terminate_timeout: 5s
+  shutdown_timeout: 2s
+sidecar:
+  port: 8080
+  read_timeout: 1s
+  read_header_timeout: 1s
+client:
+  http:
+    dial_timeout: 5s
+    dial_keep_alive: 30s
+    max_idle_conns: 100
+    idle_conn_timeout: 90s
+    tls_handshake_timeout: 10s
+    expect_continue_timeout: 1s
+    timeout: 30s
+  retry:
+    retry_max: 4
+    retry_wait_min: 200ms
+    retry_wait_max: 2s
+    backoff_type: exponential
+  circuit_breaker:
+    max_half_open_requests: 5
+    interval: 60s
+    timeout: 30s
+    min_requests: 10
+    consecutive_failures: 5
+    failure_rate: 0.6
+redis:
+  db: 0
+  dial_timeout: 5s
+  read_timeout: 3s
+  write_timeout: 3s
+  pool_size: 10
+  min_idle_conns: 3
+  pool_timeout: 4s
+  idle_timeout: 5m
+  idle_check_frequency: 1m
+  max_retries: 2
+  min_retry_backoff: 100ms
+  max_retry_backoff: 1s
+  default_ttl: 5m
+ratelimiter:
+  name: sidecar
+  max_hits: 10
+  window: 1m
+`
+
+	defaultPlaneConfig = `
+app:
+  terminate_timeout: 5s
+  shutdown_timeout: 2s
+plane:
+  url: :8080
+  read_timeout: 1s
+  read_header_timeout: 1s
+`
+)

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -195,5 +196,21 @@ func (m *Mesh) proxyRequest(r *http.Request) (*http.Request, error) {
 		}
 	}
 
+	ip := getClientIP(r)
+	req.Header.Set("X-Forwarded-For", ip)
+
 	return req, nil
+}
+
+func getClientIP(r *http.Request) string {
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+		return strings.Split(forwarded, ",")[0]
+	}
+
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+
+	return ip
 }

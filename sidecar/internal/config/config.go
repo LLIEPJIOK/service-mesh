@@ -4,12 +4,16 @@ import (
 	"fmt"
 	"time"
 
+	clientcfg "github.com/LLIEPJIOK/sidecar/pkg/client/config"
+	"github.com/LLIEPJIOK/sidecar/pkg/middleware/ratelimiter"
 	"github.com/caarlos0/env/v11"
 )
 
 type Config struct {
-	App   App     `envPrefix:"APP_"`
-	Proxy SideCar `envPrefix:"PROXY_"`
+	App         App                `envPrefix:"APP_"`
+	SideCar     SideCar            `envPrefix:"SIDECAR_"`
+	Client      clientcfg.Config   `envPrefix:"CLIENT_"`
+	RateLimiter ratelimiter.Config `envPrefix:"RATELIMITER_"`
 }
 
 type App struct {

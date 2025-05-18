@@ -7,24 +7,27 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/LLIEPJIOK/sidecar/internal/config"
+	"github.com/LLIEPJIOK/sidecar/pkg/client"
 )
+
+type Client interface {
+	Do(req *http.Request) (*http.Response, error)
+}
 
 type SideCar struct {
 	cfg    *config.SideCar
-	client *http.Client
+	client Client
 }
 
-func New(cfg *config.SideCar) (*SideCar, error) {
+func New(cfg *config.Config) (*SideCar, error) {
 	return &SideCar{
-		cfg: cfg,
-		client: &http.Client{
-			Timeout: 5 * time.Second,
-		},
+		cfg:    &cfg.SideCar,
+		client: client.New(&cfg.Client),
 	}, nil
 }
 
@@ -190,6 +193,9 @@ func (c *SideCar) proxyRequest(r *http.Request, target string) (*http.Request, e
 		}
 	}
 
+	ip := getClientIP(r)
+	req.Header.Set("X-Forwarded-For", ip)
+
 	return req, nil
 }
 
@@ -200,4 +206,17 @@ func (c *SideCar) getServiceName(host string) (string, error) {
 	}
 
 	return parts[0], nil
+}
+
+func getClientIP(r *http.Request) string {
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+		return strings.Split(forwarded, ",")[0]
+	}
+
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+
+	return ip
 }

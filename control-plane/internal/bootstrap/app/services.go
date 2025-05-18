@@ -23,7 +23,7 @@ func (a *App) runMesh(ctx context.Context, stop context.CancelFunc, wg *sync.Wai
 	defer stop()
 	defer slog.Info("proxy stopped")
 
-	m, err := mesh.New(&a.cfg.Proxy)
+	m, err := mesh.New(&a.cfg.Plane)
 	if err != nil {
 		slog.Error("failed to create proxy", slog.Any("error", err))
 
@@ -34,10 +34,10 @@ func (a *App) runMesh(ctx context.Context, stop context.CancelFunc, wg *sync.Wai
 	m.RegisterRoutes(mux)
 
 	httpServer := &http.Server{
-		Addr:              a.cfg.Proxy.URL,
+		Addr:              a.cfg.Plane.URL,
 		Handler:           mux,
-		ReadTimeout:       a.cfg.Proxy.ReadTimeout,
-		ReadHeaderTimeout: a.cfg.Proxy.ReadHeaderTimeout,
+		ReadTimeout:       a.cfg.Plane.ReadTimeout,
+		ReadHeaderTimeout: a.cfg.Plane.ReadHeaderTimeout,
 	}
 
 	go func() {
