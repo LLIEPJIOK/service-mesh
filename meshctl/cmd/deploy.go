@@ -20,6 +20,7 @@ var deployCmd = &cobra.Command{
 func init() {
 	deployCmd.Flags().StringP("name", "n", "", "Name of application")
 	deployCmd.Flags().StringP("dockerfile", "d", "", "Path to dockerfile file")
+	deployCmd.Flags().IntP("replicas", "r", 1, "Count of replicas to be up")
 	rootCmd.AddCommand(deployCmd)
 }
 
@@ -27,51 +28,81 @@ func deploy(cmd *cobra.Command, args []string) error {
 	dockerfile := cmd.Flag("dockerfile").Value.String()
 	name := getAppName(cmd)
 
+	replicas, err := cmd.Flags().GetInt("replicas")
+	if err != nil {
+		return fmt.Errorf("flag 'replicas' should be int: %w", err)
+	}
+
+	if replicas < 1 {
+		return ErrNegativeReplicas
+	}
+
+	// Build the image
+	slog.Info("Building image...")
+
+	if err := run("docker", "build", "-t", name, dockerfile); err != nil {
+		return fmt.Errorf("error building image: %w", err)
+	}
+
+	for i := range replicas {
+		if err := up(name, i+1); err != nil {
+			return err
+		}
+	}
+
+	slog.Info("Application was successfully up")
+
+	return nil
+}
+
+func up(name string, idx int) error {
+
+	cont := name
+	if idx > 1 {
+		cont += fmt.Sprintf("-%d", idx)
+	}
+
 	// Run the 'sidecar' container
-	slog.Info("Starting container: sidecar...")
+	slog.Info("Starting container: sidecar...", slog.Int("idx", idx))
+
 	err := run(
 		"docker", "run", "-d",
-		"--name", name+"-sidecar",
+		"--name", cont+"-sidecar",
 		"--network", "mesh_network",
 		"--env-file", ".env",
-		"-e", fmt.Sprintf("PROXY_TARGET=%s:8080", name),
-		"-e", "PROXY_SERVICE_NAME="+name,
-		"--label", "com.docker.compose.project=myproject",
-		"--label", "com.docker.compose.service=mesh",
+		"-e", fmt.Sprintf("PROXY_TARGET=%s:8080", cont),
+		"-e", "PROXY_SERVICE_NAME="+cont,
+		"--label", "com.docker.compose.project=control-plane",
+		"--label", "com.docker.compose.service=name"+"-sidecar",
 		"lliepjiok/sidecar:latest",
 	)
 	if err != nil {
 		return fmt.Errorf("error running mesh: %w", err)
 	}
 
-	// Build the image
-	slog.Info("Building image...")
-	if err := run("docker", "build", "-t", name, dockerfile); err != nil {
-		return fmt.Errorf("error building image: %w", err)
-	}
-
 	// Run the container
-	slog.Info("Starting container...")
+	slog.Info("Starting container...", slog.Int("idx", idx))
+
 	err = run(
 		"docker", "run", "-d",
-		"--name", name,
+		"--name", cont,
 		"--network", "mesh_network",
 		"--env-file", ".env",
-		"-e", fmt.Sprintf("HTTP_PROXY=http://%s-sidecar:8080", name),
-		"-e", fmt.Sprintf("HTTPS_PROXY=http://%s-sidecar:8080", name),
-		"--label", "com.docker.compose.project=myproject",
-		"--label", "com.docker.compose.service="+name,
+		"-e", fmt.Sprintf("HTTP_PROXY=http://%s-sidecar:8080", cont),
+		"-e", fmt.Sprintf("HTTPS_PROXY=http://%s-sidecar:8080", cont),
+		"--label", "com.docker.compose.project=control-plane",
+		"--label", "com.docker.compose.service="+cont,
 		name,
 	)
 	if err != nil {
-		return fmt.Errorf("error running app: %w", err)
+		return fmt.Errorf("error running app #%d: %w", idx, err)
 	}
 
 	// register service
 	resp, err := http.DefaultClient.Post(
 		"http://localhost:8080/register",
 		"application/json",
-		strings.NewReader(fmt.Sprintf(`{"name":%q,"address":"%s-sidecar:8080"}`, name, name)),
+		strings.NewReader(fmt.Sprintf(`{"name":%q,"address":"%s-sidecar:8080"}`, name, cont)),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to register service: %w", err)
@@ -86,8 +117,6 @@ func deploy(cmd *cobra.Command, args []string) error {
 	if resp.StatusCode != http.StatusOK {
 		return NewErrInvalidCode(resp.StatusCode)
 	}
-
-	slog.Info("Application was successfully up")
 
 	return nil
 }

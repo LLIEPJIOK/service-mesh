@@ -1,6 +1,13 @@
 package cmd
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
+
+var (
+	ErrNegativeReplicas = errors.New("replicas cannot be negative")
+)
 
 type ErrInvalidCode struct {
 	Code int

@@ -17,7 +17,8 @@ import (
 
 type Mesh struct {
 	mu       *sync.Mutex
-	registry map[string]*domain.Service
+	registry map[string][]*domain.Service
+	idx      map[string]int
 	cfg      *config.ControlPlane
 	client   *http.Client
 }
@@ -25,7 +26,8 @@ type Mesh struct {
 func New(cfg *config.ControlPlane) (*Mesh, error) {
 	return &Mesh{
 		mu:       &sync.Mutex{},
-		registry: make(map[string]*domain.Service),
+		registry: make(map[string][]*domain.Service),
+		idx:      make(map[string]int),
 		cfg:      cfg,
 		client: &http.Client{
 			Timeout: 10 * time.Second,
@@ -48,7 +50,7 @@ func (m *Mesh) registerHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	m.mu.Lock()
-	m.registry[svc.Name] = &svc
+	m.registry[svc.Name] = append(m.registry[svc.Name], &svc)
 	m.mu.Unlock()
 
 	w.WriteHeader(http.StatusOK)
@@ -62,12 +64,23 @@ func (m *Mesh) discoverHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	service, ok := m.registry[name]
+	m.mu.Lock()
+
+	services, ok := m.registry[name]
 	if !ok {
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 
 		return
 	}
+
+	service := services[m.idx[name]]
+
+	m.idx[name]++
+	if m.idx[name] == len(services) {
+		m.idx[name] = 0
+	}
+
+	m.mu.Unlock()
 
 	raw, err := json.Marshal(service)
 	if err != nil {
@@ -132,12 +145,23 @@ func (m *Mesh) getAddress(host string) (string, error) {
 		return "", ErrInvalidHost
 	}
 
-	address, ok := m.registry[parts[0]]
+	name := parts[0]
+
+	services, ok := m.registry[name]
 	if !ok {
 		return "", ErrNotFound
 	}
 
-	return address.Address, nil
+	service := services[m.idx[name]]
+
+	m.idx[name]++
+	if m.idx[name] == len(services) {
+		m.idx[name] = 0
+	}
+
+	fmt.Println(services, m.idx)
+
+	return service.Address, nil
 }
 
 func (m *Mesh) proxyRequest(r *http.Request) (*http.Request, error) {

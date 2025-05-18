@@ -16,7 +16,6 @@ var planeCmd = &cobra.Command{
 }
 
 func init() {
-	planeCmd.Flags().StringP("config", "c", "", "Path to config file")
 	rootCmd.AddCommand(planeCmd)
 }
 
@@ -35,8 +34,8 @@ func mesh(cmd *cobra.Command, args []string) error {
 		"--network", "mesh_network",
 		"-p", "8080:8080",
 		"--env-file", ".env",
-		"--label", "com.docker.compose.project=myproject",
-		"--label", "com.docker.compose.service=mesh",
+		"--label", "com.docker.compose.project=control-plane",
+		"--label", "com.docker.compose.service=control-plane",
 		"lliepjiok/control-plane:latest",
 	)
 	if err != nil {
