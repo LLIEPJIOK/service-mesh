@@ -10,33 +10,49 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/LLIEPJIOK/sidecar/internal/config"
 	"github.com/LLIEPJIOK/sidecar/pkg/client"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type Client interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-type SideCar struct {
-	cfg    *config.SideCar
-	client Client
+type Metrics interface {
+	ObserveDuration(seconds float64)
+	IncTotalRequests(code int)
 }
 
-func New(cfg *config.Config) (*SideCar, error) {
+type SideCar struct {
+	cfg     *config.SideCar
+	client  Client
+	metrics Metrics
+}
+
+func New(cfg *config.Config, metrics Metrics) (*SideCar, error) {
 	return &SideCar{
 		cfg:    &cfg.SideCar,
 		client: client.New(&cfg.Client),
+		metrics: metrics,
 	}, nil
 }
 
 func (c *SideCar) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/", c.proxyHandler)
+	mux.Handle("/metrics", promhttp.Handler())
 }
 
 func (c *SideCar) proxyHandler(w http.ResponseWriter, r *http.Request) {
 	slog.Info("incoming request", slog.String("url", r.URL.String()))
+
+	start := time.Now()
+	defer func() {
+		dur := time.Since(start)
+		c.metrics.ObserveDuration(dur.Seconds())
+	}()
 
 	if r.Host == fmt.Sprintf("%s-sidecar:%d", c.cfg.ServiceName, c.cfg.Port) {
 		c.internalProxyHandler(w, r)
@@ -51,6 +67,7 @@ func (c *SideCar) externalProxyHandler(w http.ResponseWriter, r *http.Request) {
 	service, err := c.getServiceName(r.Host)
 	if err != nil {
 		slog.Error("failed to get service name", slog.Any("error", err))
+		c.metrics.IncTotalRequests(http.StatusBadGateway)
 		http.Error(w, http.StatusText(http.StatusBadGateway), http.StatusBadGateway)
 
 		return
@@ -59,6 +76,7 @@ func (c *SideCar) externalProxyHandler(w http.ResponseWriter, r *http.Request) {
 	target, err := c.discover(r.Context(), service)
 	if err != nil {
 		slog.Error("failed to get target url", slog.Any("error", err))
+		c.metrics.IncTotalRequests(http.StatusBadGateway)
 		http.Error(w, http.StatusText(http.StatusBadGateway), http.StatusBadGateway)
 
 		return
@@ -67,6 +85,7 @@ func (c *SideCar) externalProxyHandler(w http.ResponseWriter, r *http.Request) {
 	req, err := c.proxyRequest(r, target)
 	if err != nil {
 		slog.Error("failed to create proxy request", slog.Any("error", err))
+		c.metrics.IncTotalRequests(http.StatusBadGateway)
 		http.Error(w, http.StatusText(http.StatusBadGateway), http.StatusBadGateway)
 
 		return
@@ -75,6 +94,7 @@ func (c *SideCar) externalProxyHandler(w http.ResponseWriter, r *http.Request) {
 	resp, err := c.client.Do(req)
 	if err != nil {
 		slog.Error("failed to proxy request", slog.Any("error", err))
+		c.metrics.IncTotalRequests(http.StatusBadGateway)
 		http.Error(w, http.StatusText(http.StatusBadGateway), http.StatusBadGateway)
 
 		return
@@ -92,6 +112,7 @@ func (c *SideCar) externalProxyHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	c.metrics.IncTotalRequests(resp.StatusCode)
 	w.WriteHeader(resp.StatusCode)
 
 	if _, err := io.Copy(w, resp.Body); err != nil && !errors.Is(err, io.EOF) {
@@ -103,6 +124,7 @@ func (c *SideCar) internalProxyHandler(w http.ResponseWriter, r *http.Request) {
 	req, err := c.proxyRequest(r, c.cfg.Target)
 	if err != nil {
 		slog.Error("failed to create proxy request", slog.Any("error", err))
+		c.metrics.IncTotalRequests(http.StatusBadGateway)
 		http.Error(w, http.StatusText(http.StatusBadGateway), http.StatusBadGateway)
 
 		return
@@ -111,6 +133,7 @@ func (c *SideCar) internalProxyHandler(w http.ResponseWriter, r *http.Request) {
 	resp, err := c.client.Do(req)
 	if err != nil {
 		slog.Error("failed to proxy request", slog.Any("error", err))
+		c.metrics.IncTotalRequests(http.StatusBadGateway)
 		http.Error(w, http.StatusText(http.StatusBadGateway), http.StatusBadGateway)
 
 		return
@@ -128,6 +151,7 @@ func (c *SideCar) internalProxyHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	c.metrics.IncTotalRequests(resp.StatusCode)
 	w.WriteHeader(resp.StatusCode)
 
 	if _, err := io.Copy(w, resp.Body); err != nil && !errors.Is(err, io.EOF) {

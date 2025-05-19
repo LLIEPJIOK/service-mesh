@@ -160,8 +160,6 @@ func (m *Mesh) getAddress(host string) (string, error) {
 		m.idx[name] = 0
 	}
 
-	fmt.Println(services, m.idx)
-
 	return service.Address, nil
 }
 

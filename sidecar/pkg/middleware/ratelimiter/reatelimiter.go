@@ -12,15 +12,26 @@ import (
 	"github.com/LLIEPJIOK/sidecar/pkg/middleware/ratelimiter/repository"
 )
 
+type Metrics interface {
+	ObserveDuration(seconds float64)
+	IncTotalRequests(code int)
+}
+
 func NewSlidingWindow(
 	repo repository.Repository,
 	cfg *Config,
+	metrics Metrics,
 ) middleware.Middleware {
 	window := cfg.Window
 	maxHits := cfg.MaxHits
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/metrics" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			ctx := r.Context()
 			key := getKey(r, cfg.Name)
 			now := time.Now()
@@ -28,6 +39,7 @@ func NewSlidingWindow(
 
 			err := repo.RemoveOldRecords(ctx, key, time.Time{}, startWindow)
 			if err != nil {
+				metrics.IncTotalRequests(http.StatusInternalServerError)
 				internalServerError(w, err)
 
 				return
@@ -35,6 +47,7 @@ func NewSlidingWindow(
 
 			count, err := repo.CountRecords(ctx, key)
 			if err != nil {
+				metrics.IncTotalRequests(http.StatusInternalServerError)
 				internalServerError(w, err)
 
 				return
@@ -46,19 +59,24 @@ func NewSlidingWindow(
 					http.StatusText(http.StatusTooManyRequests),
 					http.StatusTooManyRequests,
 				)
+				metrics.IncTotalRequests(http.StatusTooManyRequests)
 
 				return
 			}
 
 			err = repo.AddRecord(ctx, key, now)
 			if err != nil {
+				metrics.IncTotalRequests(http.StatusInternalServerError)
 				internalServerError(w, err)
+
 				return
 			}
 
 			err = repo.ExpireKey(ctx, key, window)
 			if err != nil {
+				metrics.IncTotalRequests(http.StatusInternalServerError)
 				internalServerError(w, err)
+
 				return
 			}
 

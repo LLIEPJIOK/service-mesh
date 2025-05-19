@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/LLIEPJIOK/sidecar/internal/app/http/sidecar"
+	"github.com/LLIEPJIOK/sidecar/internal/infra/metrics"
 	"github.com/LLIEPJIOK/sidecar/pkg/middleware"
 	"github.com/LLIEPJIOK/sidecar/pkg/middleware/ratelimiter"
 	raterepository "github.com/LLIEPJIOK/sidecar/pkg/middleware/ratelimiter/repository"
@@ -27,7 +28,9 @@ func (a *App) runMesh(ctx context.Context, stop context.CancelFunc, wg *sync.Wai
 	defer stop()
 	defer slog.Info("proxy stopped")
 
-	sc, err := sidecar.New(a.cfg)
+	metrics := metrics.NewPrometheus(a.cfg.SideCar.ServiceName)
+
+	sc, err := sidecar.New(a.cfg, metrics)
 	if err != nil {
 		slog.Error("failed to create proxy", slog.Any("error", err))
 
@@ -38,7 +41,7 @@ func (a *App) runMesh(ctx context.Context, stop context.CancelFunc, wg *sync.Wai
 	sc.RegisterRoutes(mux)
 
 	repo := raterepository.NewInMemory()
-	rateLimiter := ratelimiter.NewSlidingWindow(repo, &a.cfg.RateLimiter)
+	rateLimiter := ratelimiter.NewSlidingWindow(repo, &a.cfg.RateLimiter, metrics)
 
 	httpServer := &http.Server{
 		Addr:              fmt.Sprintf(":%d", a.cfg.SideCar.Port),
