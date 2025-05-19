@@ -31,7 +31,7 @@ func New(cfg *config.ControlPlane) (*Mesh, error) {
 		idx:      make(map[string]int),
 		cfg:      cfg,
 		client: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout: 30 * time.Second,
 		},
 	}, nil
 }
