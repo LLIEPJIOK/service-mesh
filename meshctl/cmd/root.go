@@ -7,7 +7,7 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "mesh-installer",
+	Use:   "meshctl",
 	Short: "Mesh installer tool",
 	Long:  `It is a tool for installing a service mesh with provided dockerfile`,
 	RunE: func(cmd *cobra.Command, args []string) error {
