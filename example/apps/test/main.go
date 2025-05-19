@@ -6,6 +6,7 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -57,7 +58,7 @@ const pageTemplate = `<!DOCTYPE html>
 func handleHome(w http.ResponseWriter, r *http.Request) {
 	// Выводим всё в HTML
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintf(w, pageTemplate, "себя", "hello world!")
+	fmt.Fprintf(w, pageTemplate, os.Getenv("SERVICE_NAME"), "hello world!")
 }
 
 func counterHandler(w http.ResponseWriter, r *http.Request) {
@@ -93,7 +94,7 @@ func counterHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Выводим всё в HTML
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintf(w, pageTemplate, "счётчик", string(counterBody))
+	fmt.Fprintf(w, pageTemplate, "counter", string(counterBody))
 }
 
 func main() {

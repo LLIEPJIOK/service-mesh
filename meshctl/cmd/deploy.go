@@ -101,6 +101,7 @@ func up(name, config string, idx int) error {
 		"--network", "mesh_network",
 		"-e", fmt.Sprintf("HTTP_PROXY=http://%s-sidecar:8080", cont),
 		"-e", fmt.Sprintf("HTTPS_PROXY=http://%s-sidecar:8080", cont),
+		"-e", "SERVICE_NAME="+cont,
 		"--label", "com.docker.compose.project=control-plane",
 		"--label", "com.docker.compose.service="+cont,
 		name,
