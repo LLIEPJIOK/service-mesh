@@ -34,8 +34,8 @@ type SideCar struct {
 
 func New(cfg *config.Config, metrics Metrics) (*SideCar, error) {
 	return &SideCar{
-		cfg:    &cfg.SideCar,
-		client: client.New(&cfg.Client),
+		cfg:     &cfg.SideCar,
+		client:  client.New(&cfg.Client),
 		metrics: metrics,
 	}, nil
 }
@@ -43,6 +43,27 @@ func New(cfg *config.Config, metrics Metrics) (*SideCar, error) {
 func (c *SideCar) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/", c.proxyHandler)
 	mux.Handle("/metrics", promhttp.Handler())
+	mux.HandleFunc("/address", c.addressHandler)
+}
+
+func (c *SideCar) addressHandler(w http.ResponseWriter, r *http.Request) {
+	name := r.URL.Query().Get("service")
+	if name == "" {
+		http.Error(w, "missing 'service' parameter", http.StatusBadRequest)
+
+		return
+	}
+
+	target, err := c.discover(r.Context(), name)
+	if err != nil {
+		slog.Error("failed to get target url", slog.Any("error", err))
+		http.Error(w, http.StatusText(http.StatusBadGateway), http.StatusBadGateway)
+	}
+
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write([]byte(target)); err != nil {
+		slog.Error("failed to write response", slog.Any("error", err))
+	}
 }
 
 func (c *SideCar) proxyHandler(w http.ResponseWriter, r *http.Request) {
