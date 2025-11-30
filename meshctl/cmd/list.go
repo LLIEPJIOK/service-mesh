@@ -31,7 +31,7 @@ func listContainers(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	services, err := client.ListServices()
+	services, err := client.ListContainers()
 	if err != nil {
 		slog.Error("Failed to list containers", slog.Any("error", err))
 		return err
@@ -43,12 +43,12 @@ func listContainers(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tInstances\tSTATUS\t")
-	fmt.Fprintln(w, "----\t---------\t------\t")
+	fmt.Fprintln(w, "Name\tStatus\tRestarts\tContainerID\tSidecarID\t")
+	fmt.Fprintln(w, "----\t------\t--------\t-----------\t---------\t")
 
 	for _, c := range services {
-		fmt.Fprintf(w, "%s\t%d\t%s\n",
-			c.Name, len(c.Instances), c.Status)
+		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\n",
+			c.Name, c.Status, c.Restarts, c.ContainerID, c.SidecarID)
 	}
 
 	w.Flush()

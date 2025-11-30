@@ -18,6 +18,29 @@ spec:
   # Number of replicas (default: 1)
   replicas: 1
 
+  # Health check probes (optional)
+  # Sidecar will execute these probes periodically and report to cdocker
+  # If liveness probe fails, container will be restarted
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8080
+      scheme: http
+    initialDelaySeconds: 10 # Wait before first probe
+    periodSeconds: 60 # How often to perform the probe (default: 60s)
+    timeoutSeconds: 5 # Probe timeout (default: 5s)
+    failureThreshold: 3 # Failures before considered unhealthy (default: 3)
+
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: 8080
+      scheme: http
+    initialDelaySeconds: 5
+    periodSeconds: 30
+    timeoutSeconds: 3
+    failureThreshold: 3
+
   # Sidecar configuration (optional)
   sidecar:
     ratelimiter:

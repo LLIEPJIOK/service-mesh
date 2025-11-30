@@ -17,8 +17,6 @@ import (
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
-
-	"github.com/LLIEPJIOK/service-mesh/cdocker/internal/domain"
 )
 
 // Client wraps the Docker client for container management.
@@ -237,59 +235,18 @@ func (c *Client) RemoveContainer(ctx context.Context, nameOrID string, force boo
 	return nil
 }
 
-// ListContainers returns a list of containers filtered by project label.
-func (c *Client) ListContainers(
-	ctx context.Context,
-	project string,
-) ([]domain.ContainerInfo, error) {
-	filterArgs := filters.NewArgs()
-	if project != "" {
-		filterArgs.Add("label", fmt.Sprintf("com.docker.compose.project=%s", project))
+// RestartContainer restarts a container by name or ID.
+func (c *Client) RestartContainer(ctx context.Context, nameOrID string) error {
+	slog.Info("Restarting container", slog.String("container", nameOrID))
+
+	timeout := 30 // seconds
+	if err := c.cli.ContainerRestart(ctx, nameOrID, container.StopOptions{Timeout: &timeout}); err != nil {
+		return fmt.Errorf("failed to restart container: %w", err)
 	}
 
-	containers, err := c.cli.ContainerList(ctx, container.ListOptions{
-		All:     true,
-		Filters: filterArgs,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list containers: %w", err)
-	}
+	slog.Info("Container restarted", slog.String("container", nameOrID))
 
-	result := make([]domain.ContainerInfo, 0, len(containers))
-	for _, c := range containers {
-		name := ""
-		if len(c.Names) > 0 {
-			name = strings.TrimPrefix(c.Names[0], "/")
-		}
-
-		ports := make([]domain.PortBinding, 0, len(c.Ports))
-		for _, p := range c.Ports {
-			ports = append(ports, domain.PortBinding{
-				HostPort:      int(p.PublicPort),
-				ContainerPort: int(p.PrivatePort),
-				Protocol:      p.Type,
-			})
-		}
-
-		networkName := ""
-		for netName := range c.NetworkSettings.Networks {
-			networkName = netName
-			break
-		}
-
-		result = append(result, domain.ContainerInfo{
-			ID:      c.ID[:12],
-			Name:    name,
-			Image:   c.Image,
-			Status:  c.Status,
-			State:   c.State,
-			Ports:   ports,
-			Labels:  c.Labels,
-			Network: networkName,
-		})
-	}
-
-	return result, nil
+	return nil
 }
 
 // ContainerExists checks if a container with the given name exists.

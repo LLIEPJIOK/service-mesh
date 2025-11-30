@@ -18,6 +18,21 @@ spec:
   # Number of replicas (default: 1)
   replicas: 3
 
+  # Health check probes (optional)
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8080
+    periodSeconds: 60
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: 8080
+    periodSeconds: 30
+    failureThreshold: 3
+
   # Sidecar configuration (optional)
   sidecar:
     ratelimiter:

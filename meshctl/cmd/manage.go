@@ -93,12 +93,17 @@ func destroyMesh(cmd *cobra.Command, args []string) error {
 	// Try to list and remove all mesh containers via API first
 	client := DefaultClient()
 	if err := client.HealthCheck(); err == nil {
-		services, err := client.ListServices()
+		services, err := client.ListContainers()
 		if err == nil {
+			uniqueServices := make(map[string]struct{})
 			for _, s := range services {
-				slog.Info("Removing container...", slog.String("name", s.Name))
-				_ = client.StopContainer(s.Name)
-				_ = client.RemoveContainer(s.Name, true)
+				uniqueServices[s.ServiceName] = struct{}{}
+			}
+
+			for s := range uniqueServices {
+				slog.Info("Removing service...", slog.String("name", s))
+				_ = client.StopContainer(s)
+				_ = client.RemoveContainer(s, true)
 			}
 		}
 	}

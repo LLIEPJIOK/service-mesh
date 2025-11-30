@@ -1,7 +1,7 @@
 .PHONY: run
 run: 
 	meshctl init
-	sleep 20
+	sleep 25
 	meshctl apply -f ./example/manifests/test.yaml
 	meshctl apply -f ./example/manifests/counter.yaml
 

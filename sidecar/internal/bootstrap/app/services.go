@@ -10,6 +10,7 @@ import (
 
 	"github.com/LLIEPJIOK/sidecar/internal/app/http/sidecar"
 	"github.com/LLIEPJIOK/sidecar/internal/infra/metrics"
+	"github.com/LLIEPJIOK/sidecar/internal/infra/prober"
 	"github.com/LLIEPJIOK/sidecar/pkg/middleware"
 	"github.com/LLIEPJIOK/sidecar/pkg/middleware/ratelimiter"
 	raterepository "github.com/LLIEPJIOK/sidecar/pkg/middleware/ratelimiter/repository"
@@ -18,9 +19,12 @@ import (
 type runService = func(ctx context.Context, stop context.CancelFunc, wg *sync.WaitGroup)
 
 func (a *App) services() []runService {
-	return []runService{
+	services := []runService{
 		a.runMesh,
+		a.runProber,
 	}
+
+	return services
 }
 
 func (a *App) runMesh(ctx context.Context, stop context.CancelFunc, wg *sync.WaitGroup) {
@@ -66,4 +70,23 @@ func (a *App) runMesh(ctx context.Context, stop context.CancelFunc, wg *sync.Wai
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		slog.Error("failed to shutdown scrapper server", slog.Any("error", err))
 	}
+}
+
+func (a *App) runProber(ctx context.Context, stop context.CancelFunc, wg *sync.WaitGroup) {
+	defer wg.Done()
+	defer slog.Info("prober stopped")
+
+	p := prober.New(&a.cfg.Probes)
+
+	slog.Info("Starting health check prober",
+		slog.String("service", a.cfg.SideCar.ServiceName),
+		slog.Bool("liveness_enabled", a.cfg.Probes.LivenessEnabled),
+		slog.Bool("readiness_enabled", a.cfg.Probes.ReadinessEnabled),
+	)
+
+	// Run prober in a goroutine and stop when context is done
+	go p.Start(ctx)
+
+	<-ctx.Done()
+	p.Stop()
 }

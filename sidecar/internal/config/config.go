@@ -14,6 +14,7 @@ type Config struct {
 	SideCar     SideCar            `envPrefix:"SIDECAR_"`
 	Client      clientcfg.Config   `envPrefix:"CLIENT_"`
 	RateLimiter ratelimiter.Config `envPrefix:"RATELIMITER_"`
+	Probes      Probes             `envPrefix:"PROBES_"`
 }
 
 type App struct {
@@ -27,6 +28,19 @@ type SideCar struct {
 	Port              int           `env:"PORT"                  envDefault:"8080"`
 	ReadTimeout       time.Duration `env:"READ_TIMEOUT"          envDefault:"1s"`
 	ReadHeaderTimeout time.Duration `env:"READ_HEADER_TIMEOUT"   envDefault:"1s"`
+}
+
+type Probes struct {
+	CDockerURL    string `env:"CDOCKER_URL"             envDefault:"http://cdocker:8080"`
+	ContainerName string `env:"CONTAINER_NAME,required"`
+
+	LivenessEnabled bool          `env:"LIVENESS_ENABLED" envDefault:"false"`
+	LivenessURL     string        `env:"LIVENESS_URL"     envDefault:"/health"`
+	LivenessPeriod  time.Duration `env:"LIVENESS_PERIOD"  envDefault:"60s"`
+
+	ReadinessEnabled bool          `env:"READINESS_ENABLED" envDefault:"false"`
+	ReadinessURL     string        `env:"READINESS_URL"     envDefault:"/ready"`
+	ReadinessPeriod  time.Duration `env:"READINESS_PERIOD"  envDefault:"60s"`
 }
 
 func Load() (*Config, error) {

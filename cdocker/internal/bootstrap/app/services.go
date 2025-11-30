@@ -67,6 +67,6 @@ func (a *App) runCDocker(ctx context.Context, stop context.CancelFunc, wg *sync.
 	}
 
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
-		slog.Error("failed to shutdown scrapper server", slog.Any("error", err))
+		slog.Error("failed to shutdown cdocker server", slog.Any("error", err))
 	}
 }

@@ -50,9 +50,55 @@ type ManifestMetadata struct {
 }
 
 type Spec struct {
-	Image    string         `json:"image"              yaml:"image"`
-	Replicas int            `json:"replicas,omitempty" yaml:"replicas,omitempty"`
-	Sidecar  map[string]any `json:"sidecar,omitempty"  yaml:"sidecar,omitempty"`
+	Image          string         `json:"image"                    yaml:"image"`
+	Replicas       int            `json:"replicas,omitempty"       yaml:"replicas,omitempty"`
+	Sidecar        map[string]any `json:"sidecar,omitempty"        yaml:"sidecar,omitempty"`
+	LivenessProbe  *Probe         `json:"livenessProbe,omitempty"  yaml:"livenessProbe,omitempty"`
+	ReadinessProbe *Probe         `json:"readinessProbe,omitempty" yaml:"readinessProbe,omitempty"`
+}
+
+// Probe defines a health check probe configuration.
+type Probe struct {
+	HTTPGet             *HTTPGetAction `json:"httpGet,omitempty"             yaml:"httpGet,omitempty"`
+	InitialDelaySeconds int            `json:"initialDelaySeconds,omitempty" yaml:"initialDelaySeconds,omitempty"`
+	PeriodSeconds       int            `json:"periodSeconds,omitempty"       yaml:"periodSeconds,omitempty"`
+	TimeoutSeconds      int            `json:"timeoutSeconds,omitempty"      yaml:"timeoutSeconds,omitempty"`
+	FailureThreshold    int            `json:"failureThreshold,omitempty"    yaml:"failureThreshold,omitempty"`
+	SuccessThreshold    int            `json:"successThreshold,omitempty"    yaml:"successThreshold,omitempty"`
+}
+
+// HTTPGetAction describes an HTTP GET action for probes.
+type HTTPGetAction struct {
+	Path   string `json:"path"             yaml:"path"`
+	Port   int    `json:"port,omitempty"   yaml:"port,omitempty"`
+	Scheme string `json:"scheme,omitempty" yaml:"scheme,omitempty"`
+}
+
+// ProbeDefaults returns default values for probe configuration.
+func (p *Probe) WithDefaults() *Probe {
+	if p == nil {
+		return nil
+	}
+	probe := *p
+	if probe.PeriodSeconds == 0 {
+		probe.PeriodSeconds = 60
+	}
+	if probe.TimeoutSeconds == 0 {
+		probe.TimeoutSeconds = 5
+	}
+	if probe.FailureThreshold == 0 {
+		probe.FailureThreshold = 3
+	}
+	if probe.SuccessThreshold == 0 {
+		probe.SuccessThreshold = 1
+	}
+	if probe.HTTPGet != nil && probe.HTTPGet.Port == 0 {
+		probe.HTTPGet.Port = 8080
+	}
+	if probe.HTTPGet != nil && probe.HTTPGet.Scheme == "" {
+		probe.HTTPGet.Scheme = "http"
+	}
+	return &probe
 }
 
 func DefaultManifest() Manifest {
@@ -65,15 +111,38 @@ func DefaultManifest() Manifest {
 	return manifest
 }
 
-type ServiceInfo struct {
-	Status    string         `json:"status"`
-	Name      string         `json:"name"`
-	Instances []InstanceInfo `json:"instances"`
-}
-
-type InstanceInfo struct {
+type ContainerInfo struct {
+	Name        string `json:"name"`
+	ServiceName string `json:"service_name"`
+	Status      string `json:"status"`
+	Restarts    int    `json:"restarts"`
 	ContainerID string `json:"container_id"`
 	SidecarID   string `json:"sidecar_id"`
+}
+
+// ProbeStatus represents the health status of a container.
+type ProbeStatus string
+
+const (
+	ProbeStatusHealthy   ProbeStatus = "healthy"
+	ProbeStatusUnhealthy ProbeStatus = "unhealthy"
+	ProbeStatusUnknown   ProbeStatus = "unknown"
+)
+
+// ProbeReport represents a health check report from sidecar.
+type ProbeReport struct {
+	ContainerName string      `json:"container_name"`
+	ProbeName     string      `json:"probe_name"`
+	Status        ProbeStatus `json:"status"`
+}
+
+// HealthState tracks the health state of a service.
+type HealthState struct {
+	ContainerName     string `json:"container_name"`
+	LivenessFails     int    `json:"liveness_fails"`
+	ReadinessFails    int    `json:"readiness_fails"`
+	LastLivenessTime  int64  `json:"last_liveness_time"`
+	LastReadinessTime int64  `json:"last_readiness_time"`
 }
 
 // MonitoringManifest represents a monitoring stack manifest.
@@ -122,15 +191,17 @@ type DeployPlaneResponse struct {
 
 // DeployServiceRequest represents a request to deploy a service with sidecar.
 type DeployServiceRequest struct {
-	Name     string         `json:"name"`
-	Image    string         `json:"image"`
-	Replicas int            `json:"replicas,omitempty"`
-	Sidecar  map[string]any `json:"sidecar,omitempty"`
+	Name           string         `json:"name"`
+	Image          string         `json:"image"`
+	Replicas       int            `json:"replicas,omitempty"`
+	Sidecar        map[string]any `json:"sidecar,omitempty"`
+	LivenessProbe  *Probe         `json:"livenessProbe,omitempty"`
+	ReadinessProbe *Probe         `json:"readinessProbe,omitempty"`
 }
 
 // DeployServiceResponse represents the response after deploying a service.
 type DeployServiceResponse struct {
-	Service ServiceInfo `json:"service"`
+	Services []ContainerInfo `json:"services"`
 }
 
 // DeployMonitoringRequest represents a request to deploy monitoring stack.
@@ -149,25 +220,6 @@ type DeployMonitoringResponse struct {
 	PrometheusPort int    `json:"prometheus_port"`
 	GrafanaPort    int    `json:"grafana_port"`
 	Status         string `json:"status"`
-}
-
-// ContainerInfo represents basic container information.
-type ContainerInfo struct {
-	ID      string            `json:"id"`
-	Name    string            `json:"name"`
-	Image   string            `json:"image"`
-	Status  string            `json:"status"`
-	State   string            `json:"state"`
-	Ports   []PortBinding     `json:"ports,omitempty"`
-	Labels  map[string]string `json:"labels,omitempty"`
-	Network string            `json:"network,omitempty"`
-}
-
-// PortBinding represents a port binding configuration.
-type PortBinding struct {
-	HostPort      int    `json:"host_port"`
-	ContainerPort int    `json:"container_port"`
-	Protocol      string `json:"protocol"`
 }
 
 // ListContainersResponse represents the response for listing containers.

@@ -26,21 +26,30 @@ const (
 )
 
 type CDocker struct {
-	services map[string]*domain.ServiceInfo
-	cfg      *config.CDocker
-	docker   *docker.Client
+	containers    map[string]*domain.ContainerInfo
+	services      map[string][]string
+	cfg           *config.CDocker
+	docker        *docker.Client
+	healthMonitor *HealthMonitor
 }
 
 func New(ctx context.Context, cfg *config.CDocker, dockerClient *docker.Client) (*CDocker, error) {
+	containers := make(map[string]*domain.ContainerInfo)
+
 	cd := &CDocker{
-		services: make(map[string]*domain.ServiceInfo),
-		cfg:      cfg,
-		docker:   dockerClient,
+		containers:    containers,
+		services:      make(map[string][]string),
+		cfg:           cfg,
+		docker:        dockerClient,
+		healthMonitor: NewHealthMonitor(containers, dockerClient),
 	}
 
 	if err := cd.start(ctx); err != nil {
 		return nil, fmt.Errorf("failed to start cdocker: %w", err)
 	}
+
+	// Start health monitor in background
+	go cd.healthMonitor.Start(ctx)
 
 	return cd, nil
 }
@@ -79,9 +88,24 @@ func (c *CDocker) start(ctx context.Context) error {
 }
 
 func (c *CDocker) Stop(ctx context.Context) error {
+	// Stop health monitor
+	if c.healthMonitor != nil {
+		c.healthMonitor.Stop()
+	}
+
 	if err := c.docker.RemoveContainer(ctx, controlPlane, true); err != nil {
 		return fmt.Errorf("failed to remove control-plane: %w", err)
 	}
+
+	// for _, container := range c.containers {
+	// 	if err := c.docker.RemoveContainer(ctx, container.ContainerID, true); err != nil {
+	// 		return fmt.Errorf("failed to remove container: %w", err)
+	// 	}
+
+	// 	if err := c.docker.RemoveContainer(ctx, container.SidecarID, true); err != nil {
+	// 		return fmt.Errorf("failed to remove sidecar: %w", err)
+	// 	}
+	// }
 
 	return nil
 }
@@ -102,6 +126,10 @@ func (c *CDocker) RegisterRoutes(mux *http.ServeMux) {
 
 	// Health check
 	mux.HandleFunc("GET /health", c.healthCheck)
+
+	// Probe reports
+	mux.HandleFunc("POST /probe-report", c.handleProbeReport)
+	mux.HandleFunc("GET /health-states", c.getHealthStates)
 }
 
 // applyManifest parses and applies a YAML manifest.
@@ -120,10 +148,12 @@ func (c *CDocker) applyManifest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req := domain.DeployServiceRequest{
-		Name:     manifest.Metadata.Name,
-		Image:    manifest.Spec.Image,
-		Replicas: manifest.Spec.Replicas,
-		Sidecar:  manifest.Spec.Sidecar,
+		Name:           manifest.Metadata.Name,
+		Image:          manifest.Spec.Image,
+		Replicas:       manifest.Spec.Replicas,
+		Sidecar:        manifest.Spec.Sidecar,
+		LivenessProbe:  manifest.Spec.LivenessProbe,
+		ReadinessProbe: manifest.Spec.ReadinessProbe,
 	}
 
 	c.deployServiceInternal(w, r, req)
@@ -161,7 +191,7 @@ func (c *CDocker) deployServiceInternal(
 		}
 	}
 
-	instances := make([]domain.InstanceInfo, 0, replicas)
+	services := make([]domain.ContainerInfo, 0, replicas)
 
 	clean := func(created int) {
 		for i := range created {
@@ -172,7 +202,7 @@ func (c *CDocker) deployServiceInternal(
 	}
 
 	for i := range replicas {
-		instanceInfo, err := c.deploySingleService(ctx, req, i+1)
+		ContainerInfo, err := c.deploySingleService(ctx, req, i+1)
 		if err != nil {
 			clean(i)
 			c.writeError(
@@ -185,18 +215,15 @@ func (c *CDocker) deployServiceInternal(
 			return
 		}
 
-		instances = append(instances, instanceInfo)
+		c.containers[ContainerInfo.Name] = &ContainerInfo
+		c.services[ContainerInfo.ServiceName] = append(
+			c.services[ContainerInfo.ServiceName],
+			ContainerInfo.Name,
+		)
 	}
 
-	service := domain.ServiceInfo{
-		Name:      req.Name,
-		Instances: instances,
-		Status:    "running",
-	}
-
-	c.services[req.Name] = &service
 	resp := domain.DeployServiceResponse{
-		Service: service,
+		Services: services,
 	}
 
 	c.writeJSON(w, http.StatusCreated, resp)
@@ -206,7 +233,7 @@ func (c *CDocker) deploySingleService(
 	ctx context.Context,
 	req domain.DeployServiceRequest,
 	idx int,
-) (domain.InstanceInfo, error) {
+) (domain.ContainerInfo, error) {
 	containerName := fmt.Sprintf("%s-%d", req.Name, idx)
 	sidecarName := containerName + "-sidecar"
 
@@ -215,6 +242,9 @@ func (c *CDocker) deploySingleService(
 		fmt.Sprintf("SIDECAR_TARGET=%s:8080", containerName),
 		fmt.Sprintf("SIDECAR_SERVICE_NAME=%s", containerName),
 	)
+
+	// Add probe configuration to sidecar environment
+	sidecarEnv = append(sidecarEnv, c.buildProbeEnvVars(req, containerName)...)
 
 	sidecarID, err := c.docker.CreateAndStartContainer(ctx, docker.ContainerConfig{
 		Name:    sidecarName,
@@ -227,7 +257,7 @@ func (c *CDocker) deploySingleService(
 		},
 	})
 	if err != nil {
-		return domain.InstanceInfo{}, fmt.Errorf("failed to create sidecar: %w", err)
+		return domain.ContainerInfo{}, fmt.Errorf("failed to create sidecar: %w", err)
 	}
 
 	appEnv := []string{
@@ -247,17 +277,55 @@ func (c *CDocker) deploySingleService(
 		},
 	})
 	if err != nil {
-		return domain.InstanceInfo{}, fmt.Errorf("failed to create app: %w", err)
+		return domain.ContainerInfo{}, fmt.Errorf("failed to create app: %w", err)
 	}
 
 	if err := c.registerService(ctx, req.Name, sidecarName); err != nil {
 		slog.Warn("Failed to register service with control plane", slog.Any("error", err))
 	}
 
-	return domain.InstanceInfo{
+	return domain.ContainerInfo{
+		Name:        containerName,
+		ServiceName: req.Name,
+		Status:      "initializing",
 		ContainerID: appID,
 		SidecarID:   sidecarID,
 	}, nil
+}
+
+// buildProbeEnvVars creates environment variables for probe configuration.
+func (c *CDocker) buildProbeEnvVars(
+	req domain.DeployServiceRequest,
+	containerName string,
+) []string {
+	var envVars []string
+
+	envVars = append(envVars,
+		"PROBES_CDOCKER_URL=http://cdocker:8080",
+		fmt.Sprintf("PROBES_CONTAINER_NAME=%s", containerName),
+	)
+
+	if req.LivenessProbe != nil {
+		probe := req.LivenessProbe.WithDefaults()
+		envVars = append(envVars,
+			"PROBES_LIVENESS_ENABLED=true",
+			fmt.Sprintf("PROBES_LIVENESS_URL=http://%s:%d%s",
+				containerName, probe.HTTPGet.Port, probe.HTTPGet.Path),
+			fmt.Sprintf("PROBES_LIVENESS_PERIOD=%ds", probe.PeriodSeconds),
+		)
+	}
+
+	if req.ReadinessProbe != nil {
+		probe := req.ReadinessProbe.WithDefaults()
+		envVars = append(envVars,
+			"PROBES_READINESS_ENABLED=true",
+			fmt.Sprintf("PROBES_READINESS_URL=http://%s:%d%s",
+				containerName, probe.HTTPGet.Port, probe.HTTPGet.Path),
+			fmt.Sprintf("PROBES_READINESS_PERIOD=%ds", probe.PeriodSeconds),
+		)
+	}
+
+	return envVars
 }
 
 func (c *CDocker) registerService(ctx context.Context, name, sidecarName string) error {
@@ -284,7 +352,7 @@ func (c *CDocker) registerService(ctx context.Context, name, sidecarName string)
 }
 
 func (c *CDocker) listContainers(w http.ResponseWriter, r *http.Request) {
-	c.writeJSON(w, http.StatusOK, c.services)
+	c.writeJSON(w, http.StatusOK, c.containers)
 }
 
 func (c *CDocker) stopContainer(w http.ResponseWriter, r *http.Request) {
@@ -307,21 +375,21 @@ func (c *CDocker) stopContainer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	service.Status = "stopping"
-
-	for _, instance := range service.Instances {
-		if err := c.docker.StopContainer(ctx, instance.ContainerID); err != nil {
+	for _, instance := range service {
+		container := c.containers[instance]
+		container.Status = "stopping"
+		if err := c.docker.StopContainer(ctx, container.ContainerID); err != nil {
 			c.writeError(w, http.StatusInternalServerError, "failed to stop container", err)
 			return
 		}
 
-		if err := c.docker.StopContainer(ctx, instance.SidecarID); err != nil {
+		if err := c.docker.StopContainer(ctx, container.SidecarID); err != nil {
 			c.writeError(w, http.StatusInternalServerError, "failed to stop sidecar", err)
 			return
 		}
-	}
 
-	service.Status = "stopped"
+		container.Status = "stopped"
+	}
 
 	resp := domain.StopContainerResponse{
 		Name:   req.Name,
@@ -351,18 +419,20 @@ func (c *CDocker) removeContainer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	service.Status = "removing"
-
-	for _, instance := range service.Instances {
-		if err := c.docker.RemoveContainer(ctx, instance.ContainerID, req.Force); err != nil {
+	for _, instance := range service {
+		container := c.containers[instance]
+		container.Status = "removing"
+		if err := c.docker.RemoveContainer(ctx, container.ContainerID, true); err != nil {
 			c.writeError(w, http.StatusInternalServerError, "failed to remove container", err)
 			return
 		}
 
-		if err := c.docker.RemoveContainer(ctx, instance.SidecarID, req.Force); err != nil {
+		if err := c.docker.RemoveContainer(ctx, container.SidecarID, true); err != nil {
 			c.writeError(w, http.StatusInternalServerError, "failed to remove sidecar", err)
 			return
 		}
+
+		delete(c.containers, instance)
 	}
 
 	delete(c.services, req.Name)
@@ -510,12 +580,35 @@ func (c *CDocker) healthCheck(w http.ResponseWriter, r *http.Request) {
 	c.writeJSON(w, http.StatusOK, map[string]string{"status": "healthy"})
 }
 
+// handleProbeReport processes health probe reports from sidecars.
+func (c *CDocker) handleProbeReport(w http.ResponseWriter, r *http.Request) {
+	var report domain.ProbeReport
+	if err := json.NewDecoder(r.Body).Decode(&report); err != nil {
+		c.writeError(w, http.StatusBadRequest, "invalid request body", err)
+		return
+	}
+
+	slog.Info("Received probe report",
+		slog.String("service", report.ContainerName),
+		slog.String("probe", report.ProbeName),
+		slog.String("status", string(report.Status)),
+	)
+
+	c.healthMonitor.HandleProbeReport(report)
+
+	w.WriteHeader(http.StatusAccepted)
+}
+
+// getHealthStates returns all container health states.
+func (c *CDocker) getHealthStates(w http.ResponseWriter, r *http.Request) {
+	states := c.healthMonitor.GetAllHealthStates()
+	c.writeJSON(w, http.StatusOK, states)
+}
+
 // writeJSON writes a JSON response.
 func (c *CDocker) writeJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-
-	fmt.Println(data)
 
 	if err := json.NewEncoder(w).Encode(data); err != nil {
 		slog.Error("Failed to encode JSON response", slog.Any("error", err))
@@ -566,8 +659,6 @@ func buildEnvVarsFromMap(m map[string]any) []string {
 	for k, v := range envMap {
 		envVars = append(envVars, fmt.Sprintf("%s=%s", k, v))
 	}
-
-	fmt.Println(envVars)
 
 	return envVars
 }

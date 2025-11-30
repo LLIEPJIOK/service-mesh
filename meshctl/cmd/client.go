@@ -24,10 +24,13 @@ func DefaultClient() *Client {
 	return NewClient(fmt.Sprintf("http://localhost:%d", cdockerPort))
 }
 
-type ServiceInfo struct {
-	Status    string         `json:"status"`
-	Name      string         `json:"name"`
-	Instances []InstanceInfo `json:"instances"`
+type ContainerInfo struct {
+	Name        string `json:"name"`
+	ServiceName string `json:"service_name"`
+	Status      string `json:"status"`
+	Restarts    int    `json:"restarts"`
+	ContainerID string `json:"container_id"`
+	SidecarID   string `json:"sidecar_id"`
 }
 
 type InstanceInfo struct {
@@ -35,7 +38,7 @@ type InstanceInfo struct {
 	SidecarID   string `json:"sidecar_id"`
 }
 
-type ListServicesResponse map[string]ServiceInfo
+type ListContainersResponse map[string]ContainerInfo
 
 type StopContainerRequest struct {
 	Name string `json:"name"`
@@ -65,23 +68,6 @@ type DeployMonitoringResponse struct {
 	Status         string `json:"status"`
 }
 
-type ContainerInfo struct {
-	ID      string            `json:"id"`
-	Name    string            `json:"name"`
-	Image   string            `json:"image"`
-	Status  string            `json:"status"`
-	State   string            `json:"state"`
-	Ports   []PortBinding     `json:"ports,omitempty"`
-	Labels  map[string]string `json:"labels,omitempty"`
-	Network string            `json:"network,omitempty"`
-}
-
-type PortBinding struct {
-	HostPort      int    `json:"host_port"`
-	ContainerPort int    `json:"container_port"`
-	Protocol      string `json:"protocol"`
-}
-
 func (c *Client) DeployMonitoring(req DeployMonitoringRequest) (*DeployMonitoringResponse, error) {
 	var resp DeployMonitoringResponse
 	if err := c.post("/monitoring", req, &resp); err != nil {
@@ -90,8 +76,8 @@ func (c *Client) DeployMonitoring(req DeployMonitoringRequest) (*DeployMonitorin
 	return &resp, nil
 }
 
-func (c *Client) ListServices() (ListServicesResponse, error) {
-	var resp ListServicesResponse
+func (c *Client) ListContainers() (ListContainersResponse, error) {
+	var resp ListContainersResponse
 
 	if err := c.get("/containers", &resp); err != nil {
 		return nil, err
