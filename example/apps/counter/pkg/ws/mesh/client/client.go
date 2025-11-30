@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/LLIEPJIOK/service-mesh/ws/pkg/ws"
+	"counter/pkg/ws"
 )
 
 type MeshClient struct {
@@ -63,20 +63,8 @@ func getAddress(
 		return "", "", fmt.Errorf("failed to decode address response: %w", err)
 	}
 
-	// address может быть вида "http://counter-1-sidecar:8080" или "counter-1-sidecar:8080"
-	// Убираем http:// или https:// если есть
-	address = strings.TrimPrefix(address, "http://")
-	address = strings.TrimPrefix(address, "https://")
+	container := address[: strings.Index(address, "-sidecar")]
+	address = "ws://" + container + ":9090"
 
-	// Извлекаем имя контейнера (без -sidecar и без порта)
-	idx := strings.Index(address, "-sidecar")
-	if idx == -1 {
-		return "", "", fmt.Errorf("invalid address format: %s", address)
-	}
-	container := address[:idx]
-
-	// Строим WebSocket адрес (с / в конце для избежания редиректа)
-	wsAddress := "ws://" + container + ":9090/"
-
-	return wsAddress, container, nil
+	return address, container, nil
 }

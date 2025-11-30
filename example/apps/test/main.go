@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -8,6 +9,9 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"testserver/pkg/ws"
+	"testserver/pkg/ws/mesh/client"
 )
 
 // HTML шаблон
@@ -97,10 +101,76 @@ func counterHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, pageTemplate, "counter", string(counterBody))
 }
 
+// counterWSHandler получает счётчик через WebSocket
+func counterWSHandler(meshClient *client.MeshClient) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+
+		// Инкрементируем счётчик
+		var resp struct {
+			Value int64 `json:"value"`
+		}
+		if err := meshClient.RequestTyped(ctx, "counter.increment", nil, &resp); err != nil {
+			slog.Error("failed to increment counter", slog.Any("error", err))
+			http.Error(w, "Failed to increment", http.StatusServiceUnavailable)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprintf(w, pageTemplate, "counter (WebSocket)", fmt.Sprintf("Value: %d", resp.Value))
+	}
+}
+
+func initCounterClient(tlsCfg *ws.TLSConfig) (*client.MeshClient, error) {
+	serviceName := os.Getenv("SERVICE_NAME")
+	if serviceName == "" {
+		serviceName = "test-1"
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	meshClient, err := client.New(ctx, client.Config{
+		ServiceName: serviceName,
+		TargetName:  "counter",
+		TLS:         tlsCfg,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create mesh client: %w", err)
+	}
+
+	if err := meshClient.Connect(ctx); err != nil {
+		return nil, fmt.Errorf("failed to connect to counter: %w", err)
+	}
+
+	return meshClient, nil
+}
+
 func main() {
+	// Пробуем загрузить TLS конфигурацию
+	tlsCfg, err := client.TLSConfigFromEnv()
+	if err != nil {
+		slog.Warn("TLS not configured", slog.Any("error", err))
+	} else {
+		slog.Info("TLS configured", slog.String("service", os.Getenv("SERVICE_NAME")))
+	}
+
 	// запуск сервера
 	http.HandleFunc("/", handleHome)
 	http.HandleFunc("/counter", counterHandler)
+
+	// Инициализируем WebSocket клиент к counter
+	if tlsCfg != nil {
+		meshClient, err := initCounterClient(tlsCfg)
+		if err != nil {
+			slog.Error("failed to init counter client", slog.Any("error", err))
+		} else {
+			defer meshClient.Close()
+			http.HandleFunc("/counter-ws", counterWSHandler(meshClient))
+			slog.Info("Counter WebSocket client initialized")
+		}
+	}
 
 	fmt.Println("Server is running on http://localhost:8080")
 	if err := http.ListenAndServe(":8080", nil); err != nil {

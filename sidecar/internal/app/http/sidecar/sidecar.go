@@ -61,8 +61,8 @@ func (c *SideCar) addressHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write([]byte(target)); err != nil {
-		slog.Error("failed to write response", slog.Any("error", err))
+	if err := json.NewEncoder(w).Encode(target); err != nil {
+		slog.Error("failed to encode target", slog.Any("error", err))
 	}
 }
 

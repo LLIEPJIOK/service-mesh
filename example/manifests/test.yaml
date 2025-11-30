@@ -16,7 +16,7 @@ spec:
   image: lliepjiok/test:latest
 
   # Number of replicas (default: 1)
-  replicas: 3
+  replicas: 1
 
   # Health check probes (optional)
   livenessProbe:

@@ -1,9 +1,9 @@
 .PHONY: run
 run: 
 	meshctl init
-	sleep 25
-	meshctl apply -f ./example/manifests/test.yaml
+	sleep 40
 	meshctl apply -f ./example/manifests/counter.yaml
+	meshctl apply -f ./example/manifests/test.yaml
 
 .PHONY: prepare
 prepare: push install

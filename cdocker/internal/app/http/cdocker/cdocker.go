@@ -2,6 +2,7 @@ package cdocker
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"github.com/LLIEPJIOK/service-mesh/cdocker/internal/config"
 	"github.com/LLIEPJIOK/service-mesh/cdocker/internal/domain"
 	"github.com/LLIEPJIOK/service-mesh/cdocker/internal/infra/docker"
+	"github.com/LLIEPJIOK/service-mesh/cdocker/internal/infra/pki"
 	"gopkg.in/yaml.v3"
 )
 
@@ -31,10 +33,19 @@ type CDocker struct {
 	cfg           *config.CDocker
 	docker        *docker.Client
 	healthMonitor *HealthMonitor
+	pki           *pki.PKI
 }
 
 func New(ctx context.Context, cfg *config.CDocker, dockerClient *docker.Client) (*CDocker, error) {
 	containers := make(map[string]*domain.ContainerInfo)
+
+	// Создаём PKI для генерации сертификатов
+	meshPKI, err := pki.New()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create PKI: %w", err)
+	}
+
+	slog.Info("PKI initialized", slog.Int("ca_cert_len", len(meshPKI.CACertPEM())))
 
 	cd := &CDocker{
 		containers:    containers,
@@ -42,6 +53,7 @@ func New(ctx context.Context, cfg *config.CDocker, dockerClient *docker.Client) 
 		cfg:           cfg,
 		docker:        dockerClient,
 		healthMonitor: NewHealthMonitor(containers, dockerClient),
+		pki:           meshPKI,
 	}
 
 	if err := cd.start(ctx); err != nil {
@@ -237,6 +249,17 @@ func (c *CDocker) deploySingleService(
 	containerName := fmt.Sprintf("%s-%d", req.Name, idx)
 	sidecarName := containerName + "-sidecar"
 
+	// Генерируем сертификат для сервиса
+	certPEM, keyPEM, err := c.pki.GenerateServiceCert(containerName)
+	if err != nil {
+		return domain.ContainerInfo{}, fmt.Errorf("failed to generate certificate: %w", err)
+	}
+
+	// Кодируем сертификаты в base64 для передачи через env
+	certB64 := base64.StdEncoding.EncodeToString(certPEM)
+	keyB64 := base64.StdEncoding.EncodeToString(keyPEM)
+	caB64 := base64.StdEncoding.EncodeToString(c.pki.CACertPEM())
+
 	sidecarEnv := buildEnvVarsFromMap(req.Sidecar)
 	sidecarEnv = append(sidecarEnv,
 		fmt.Sprintf("SIDECAR_TARGET=%s:8080", containerName),
@@ -264,6 +287,10 @@ func (c *CDocker) deploySingleService(
 		fmt.Sprintf("HTTP_PROXY=http://%s:8080", sidecarName),
 		fmt.Sprintf("HTTPS_PROXY=http://%s:8080", sidecarName),
 		fmt.Sprintf("SERVICE_NAME=%s", containerName),
+		// TLS сертификаты в base64
+		fmt.Sprintf("TLS_CERT=%s", certB64),
+		fmt.Sprintf("TLS_KEY=%s", keyB64),
+		fmt.Sprintf("TLS_CA=%s", caB64),
 	}
 
 	appID, err := c.docker.CreateAndStartContainer(ctx, docker.ContainerConfig{

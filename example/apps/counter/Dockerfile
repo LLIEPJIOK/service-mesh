@@ -1,4 +1,4 @@
-FROM golang:1.24.2-alpine AS builder
+FROM golang:1.25.4-alpine AS builder
 
 WORKDIR /app
 
@@ -24,4 +24,6 @@ WORKDIR /bin
 COPY --from=builder /app/server /bin/server
 
 EXPOSE 8080
+EXPOSE 9090
+
 ENTRYPOINT ["/bin/server"]
