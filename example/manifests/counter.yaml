@@ -1,0 +1,34 @@
+# Service Mesh Manifest Format
+#
+# Example manifest for deploying a service with sidecar
+
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: counter
+  labels:
+    app: counter
+    version: v1
+
+spec:
+  # Docker Hub image (required)
+  image: lliepjiok/counter:latest
+
+  # Number of replicas (default: 1)
+  replicas: 1
+
+  # Sidecar configuration (optional)
+  sidecar:
+    ratelimiter:
+      max_hits: 100
+      window: 1m
+
+    client:
+      retry:
+        retry_max: 3
+        retry_wait_min: 100ms
+        retry_wait_max: 1s
+      circuit_breaker:
+        max_half_open_requests: 5
+        timeout: 30s

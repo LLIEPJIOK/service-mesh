@@ -1,18 +1,28 @@
-package cmd
+package cdocker
+
+var (
+	planeEnvs = []string{
+		"APP_TERMINATE_TIMEOUT=5s",
+		"APP_SHUTDOWN_TIMEOUT=2s",
+		"PLANE_URL=:8080",
+		"PLANE_READ_TIMEOUT=1s",
+		"PLANE_READ_HEADER_TIMEOUT=1s",
+	}
+)
 
 const (
-	// Конфигурация по умолчание для control plane
+	// defaultPlaneConfig is the default configuration for control plane.
 	defaultPlaneConfig = `
-  app:
-    terminate_timeout: 5s
-    shutdown_timeout: 2s
-  plane:
-    url: :8080
-    read_timeout: 1s
-    read_header_timeout: 1s
-  `
+app:
+  terminate_timeout: 5s
+  shutdown_timeout: 2s
+plane:
+  url: :8080
+  read_timeout: 1s
+  read_header_timeout: 1s
+`
 
-	// Конфигурация по умолчание для sidecar
+	// defaultSidecarConfig is the default configuration for sidecar.
 	defaultSidecarConfig = `
 app:
   terminate_timeout: 5s

@@ -1,0 +1,20 @@
+# Control Plane Manifest
+
+apiVersion: v1
+kind: ControlPlane
+
+metadata:
+  name: control-plane
+
+spec:
+  # Port to expose (default: 8080)
+  port: 8080
+
+  # Configuration (optional)
+  config:
+    app:
+      terminate_timeout: 5s
+      shutdown_timeout: 2s
+    plane:
+      read_timeout: 1s
+      read_header_timeout: 1s

@@ -1,0 +1,19 @@
+# Monitoring Stack Manifest
+
+apiVersion: v1
+kind: Monitoring
+
+metadata:
+  name: monitoring
+
+spec:
+  prometheus:
+    # Path to prometheus.yml config file
+    config: ./prometheus.yml
+    port: 9090
+
+  grafana:
+    port: 3000
+    admin:
+      user: admin
+      password: admin
