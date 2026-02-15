@@ -10,8 +10,8 @@ import (
 	"os"
 	"sync/atomic"
 
-	"counter/pkg/ws"
-	"counter/pkg/ws/mesh/client"
+	"github.com/LLIEPJIOK/ws-mesh/pkg/ws"
+	"github.com/LLIEPJIOK/ws-mesh/pkg/ws/mesh/client"
 )
 
 var cnt int32
@@ -20,15 +20,15 @@ func counterHandler(w http.ResponseWriter, r *http.Request) {
 	cnt++
 	// 2 из 3 запросов возвращают ошибку
 	// таким образом идёт проверка на повторы в sidecar
-	if cnt%3 != 0 {
-		http.Error(
-			w,
-			http.StatusText(http.StatusTooManyRequests),
-			http.StatusTooManyRequests,
-		)
+	// if cnt%3 != 0 {
+	// 	http.Error(
+	// 		w,
+	// 		http.StatusText(http.StatusTooManyRequests),
+	// 		http.StatusTooManyRequests,
+	// 	)
 
-		return
-	}
+	// 	return
+	// }
 
 	fmt.Fprint(w, cnt)
 }

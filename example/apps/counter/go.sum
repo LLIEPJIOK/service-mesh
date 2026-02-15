@@ -1,2 +1,4 @@
+github.com/LLIEPJIOK/ws-mesh v0.0.2 h1:3Rc+4+qQAxjgeP+aWxM1S7S/g78TKvif54n5+gmL6iA=
+github.com/LLIEPJIOK/ws-mesh v0.0.2/go.mod h1:cBFqYfEmPmDWx85EmLXlWfIkYCRO1nWz5zemfwSYVLw=
 github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg=
 github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=

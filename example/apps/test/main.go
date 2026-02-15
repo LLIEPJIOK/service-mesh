@@ -10,8 +10,8 @@ import (
 	"os"
 	"time"
 
-	"testserver/pkg/ws"
-	"testserver/pkg/ws/mesh/client"
+	"github.com/LLIEPJIOK/ws-mesh/pkg/ws"
+	"github.com/LLIEPJIOK/ws-mesh/pkg/ws/mesh/client"
 )
 
 // HTML шаблон

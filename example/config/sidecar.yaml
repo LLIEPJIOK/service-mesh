@@ -28,5 +28,5 @@ client:
     failure_rate: 0.6
 ratelimiter:
   name: sidecar
-  max_hits: 10
-  window: 1m
+  max_hits: 10000000000
+  window: 1s

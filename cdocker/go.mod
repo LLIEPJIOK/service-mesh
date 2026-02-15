@@ -1,6 +1,6 @@
 module github.com/LLIEPJIOK/service-mesh/cdocker
 
-go 1.25.4
+go 1.26.0
 
 require (
 	github.com/caarlos0/env/v11 v11.3.1
