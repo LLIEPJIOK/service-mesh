@@ -34,3 +34,7 @@ go.work.sum
 
 # Generated files
 generated/
+k&s/charts/
+
+# MacOS files
+.DS_Store
