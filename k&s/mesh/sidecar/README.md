@@ -69,3 +69,66 @@ sidecar:
 ## Реализация
 
 Подробную архитектурную реализацию sidecar см. в [Реализация sidecar](docs/implementation.md).
+
+## Практические команды (MVP)
+
+После добавления реализации доступны базовые команды для проверки, сборки и публикации образа.
+
+Запускайте команды из директории `k&s/mesh/sidecar`.
+
+```bash
+cd k\&s/mesh/sidecar
+```
+
+### Локальная проверка и сборка
+
+```bash
+make fmt
+make vet
+make test
+make build
+```
+
+Бинарник sidecar будет создан в `bin/sidecar`.
+
+### Сборка Docker-образа
+
+```bash
+make docker-build VERSION=v0.1.0 DOCKERHUB_NAMESPACE=lliepjiok IMAGE_NAME=mesh-sidecar
+```
+
+Команда собирает образ и выставляет 2 тега:
+
+- `lliepjiok/mesh-sidecar:v0.1.0`
+- `lliepjiok/mesh-sidecar:latest`
+
+### Push в Docker Hub
+
+```bash
+docker login
+make docker-push VERSION=v0.1.0 DOCKERHUB_NAMESPACE=lliepjiok IMAGE_NAME=mesh-sidecar
+```
+
+Для полного цикла (build + push) можно использовать:
+
+```bash
+make docker-build-push VERSION=v0.1.0 DOCKERHUB_NAMESPACE=lliepjiok IMAGE_NAME=mesh-sidecar
+```
+
+### Минимальный запуск sidecar (ручной)
+
+```bash
+INBOUND_PLAIN_PORT=15006 \
+OUTBOUND_PORT=15002 \
+INBOUND_MTLS_PORT=15001 \
+METRICS_PORT=9090 \
+APP_TARGET_ADDR=127.0.0.1:8080 \
+BOOTSTRAP_CERTIFICATES=false \
+CERT_FILE=/etc/mesh/certs/tls.crt \
+KEY_FILE=/etc/mesh/certs/tls.key \
+CA_FILE=/etc/mesh/ca/ca.crt \
+./bin/sidecar
+```
+
+> [!IMPORTANT]
+> Перехват `SO_ORIGINAL_DST` реализован для Linux runtime. Для Kubernetes deployment sidecar должен запускаться в Linux pod.
