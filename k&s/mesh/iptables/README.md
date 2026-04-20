@@ -206,6 +206,44 @@ iptables -t nat -A MESH_OUTPUT -p tcp -j REDIRECT --to-port $OUTBOUND_PORT
 echo "iptables rules applied successfully"
 ```
 
+## Практические команды (MVP)
+
+Запускайте команды из директории `k&s/mesh/iptables`.
+
+```bash
+cd k\&s/mesh/iptables
+```
+
+### Сборка Docker-образа
+
+```bash
+make docker-build VERSION=v0.1.0 DOCKERHUB_NAMESPACE=lliepjiok IMAGE_NAME=iptables-init
+```
+
+Команда собирает образ и выставляет 2 тега:
+
+- `lliepjiok/iptables-init:v0.1.0`
+- `lliepjiok/iptables-init:latest`
+
+Для получения тегов в формате hook-контракта (например, `mesh/iptables-init:latest`) укажите соответствующий namespace:
+
+```bash
+make docker-build VERSION=v0.1.0 DOCKERHUB_NAMESPACE=mesh IMAGE_NAME=iptables-init
+```
+
+### Push в Docker Hub
+
+```bash
+docker login
+make docker-push VERSION=v0.1.0 DOCKERHUB_NAMESPACE=lliepjiok IMAGE_NAME=iptables-init
+```
+
+Для полного цикла (build + push) можно использовать:
+
+```bash
+make docker-build-push VERSION=v0.1.0 DOCKERHUB_NAMESPACE=lliepjiok IMAGE_NAME=iptables-init
+```
+
 ## Интеграция с hook
 
 Хук добавляет init‑контейнер со всеми необходимыми переменными окружения. Полный контракт см. в [Service mesh hook](../hook/README.md).
