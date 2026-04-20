@@ -159,6 +159,69 @@ Content-Type: application/json
 > [!Note]
 > Sidecar MUST отслеживать срок действия сертификата и запрашивать новый сертификат до истечения текущего.
 
+## Практические команды (MVP)
+
+Запускайте команды из директории `k&s/mesh/certmanager`.
+
+```bash
+cd k\&s/mesh/certmanager
+```
+
+### Локальная проверка и сборка
+
+```bash
+make fmt
+make vet
+make test
+make build
+```
+
+Бинарник cert-manager будет создан в `bin/certmanager`.
+
+### Сборка Docker-образа
+
+```bash
+make docker-build VERSION=v0.1.0 DOCKERHUB_NAMESPACE=lliepjiok IMAGE_NAME=cert-manager
+```
+
+Команда собирает образ и выставляет 2 тега:
+
+- `lliepjiok/cert-manager:v0.1.0`
+- `lliepjiok/cert-manager:latest`
+
+### Push в Docker Hub
+
+```bash
+docker login
+make docker-push VERSION=v0.1.0 DOCKERHUB_NAMESPACE=lliepjiok IMAGE_NAME=cert-manager
+```
+
+Для полного цикла (build + push):
+
+```bash
+make docker-build-push VERSION=v0.1.0 DOCKERHUB_NAMESPACE=lliepjiok IMAGE_NAME=cert-manager
+```
+
+## Конфигурация окружения
+
+| Переменная            | Назначение                                               | Значение по умолчанию     |
+| --------------------- | -------------------------------------------------------- | ------------------------- |
+| `HTTP_ADDR`           | Адрес HTTP-сервера cert-manager                          | `:8080`                   |
+| `PORT`                | Порт HTTP-сервера (используется, если `HTTP_ADDR` пуст)  | `8080`                    |
+| `ROOT_CA_CERT_FILE`   | Путь к PEM-файлу корневого CA сертификата                | `/etc/mesh/ca/tls.crt`    |
+| `ROOT_CA_KEY_FILE`    | Путь к PEM-файлу корневого CA приватного ключа           | `/etc/mesh/ca/tls.key`    |
+| `LEAF_TTL`            | Срок действия выдаваемого leaf-сертификата               | `8760h`                   |
+| `MAX_REQUEST_BYTES`   | Максимальный размер HTTP тела запроса                    | `1048576`                 |
+| `RATE_LIMIT_RPS`      | Ограничение частоты запросов (`0` отключает ограничение) | `0`                       |
+| `RATE_LIMIT_BURST`    | Размер burst для rate limit                              | `0`                       |
+| `READ_HEADER_TIMEOUT` | Таймаут чтения HTTP заголовков                           | `10s`                     |
+| `IDLE_TIMEOUT`        | Таймаут idle соединений                                  | `60s`                     |
+| `SHUTDOWN_TIMEOUT`    | Таймаут graceful shutdown                                | `10s`                     |
+| `KUBECONFIG`          | Путь к kubeconfig для локального запуска (вне кластера)  | `~/.kube/config` fallback |
+
+> [!IMPORTANT]
+> Для MVP cert-manager выставляет DNS SAN в формате `${serviceAccount}.${namespace}.svc.cluster.local` на основе identity из TokenReview. Это предполагает, что для демонстрационного сценария service name совпадает с service account name.
+
 ## См. также
 
 - [Сертификаты](../../docs/cert/README.md)
