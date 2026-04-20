@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - 00-namespace.yaml
+  - 01-serviceaccount-productpage.yaml
+  - 02-serviceaccount-details.yaml
+  - 03-serviceaccount-reviews.yaml
+  - 04-serviceaccount-ratings.yaml
+  - 05-role-pod-reader.yaml
+  - 06-rolebinding-pod-reader.yaml
+  - 10-deployment-productpage-v1.yaml
+  - 11-deployment-details-v1.yaml
+  - 12-deployment-ratings-v1.yaml
+  - 13-deployment-reviews-v1.yaml
+  - 14-deployment-reviews-v2.yaml
+  - 15-deployment-reviews-v3.yaml
+  - 20-service-productpage.yaml
+  - 21-service-details.yaml
+  - 22-service-ratings.yaml
+  - 23-service-reviews.yaml
+  - 24-ingress-productpage.yaml

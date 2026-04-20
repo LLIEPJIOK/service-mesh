@@ -75,6 +75,21 @@ func (s *Service) BuildPatch(request *admissionv1.AdmissionRequest, pod *corev1.
 	serviceAccountName := strings.TrimSpace(pod.Spec.ServiceAccountName)
 	if serviceAccountName == "" {
 		serviceAccountName = deriveServiceAccountName(pod)
+		s.logger.Printf(
+			"derived service account for pod %q/%q operation=%s serviceAccount=%q",
+			namespace,
+			pod.Name,
+			request.Operation,
+			serviceAccountName,
+		)
+	} else {
+		s.logger.Printf(
+			"using explicit service account for pod %q/%q operation=%s serviceAccount=%q",
+			namespace,
+			pod.Name,
+			request.Operation,
+			serviceAccountName,
+		)
 	}
 
 	operations := make([]patchOperation, 0, 12)
@@ -100,11 +115,16 @@ func (s *Service) BuildPatch(request *admissionv1.AdmissionRequest, pod *corev1.
 	operations = append(operations, buildAnnotationsPatchOps(pod.Annotations, annotations)...)
 
 	if !hasVolumeByName(pod.Spec.Volumes, volumeNameMeshCA) {
+		s.logger.Printf("adding mesh-ca secret volume for pod %q/%q secret=%q", namespace, pod.Name, "mesh-root-ca")
 		meshCAVolume := corev1.Volume{
 			Name: volumeNameMeshCA,
 			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{Name: "mesh-root-ca"},
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: "mesh-root-ca",
+					Items: []corev1.KeyToPath{{
+						Key:  "tls.crt",
+						Path: "ca.crt",
+					}},
 				},
 			},
 		}
@@ -122,11 +142,17 @@ func (s *Service) BuildPatch(request *admissionv1.AdmissionRequest, pod *corev1.
 				Value: meshCAVolume,
 			})
 		}
+	} else {
+		s.logger.Printf("mesh-ca volume already exists for pod %q/%q", namespace, pod.Name)
 	}
 
 	uid := s.cfg.SidecarUID
 	uidString := strconv.FormatInt(uid, 10)
 	inboundPorts := collectInboundPorts(pod.Spec.Containers)
+	appTargetAddr := deriveAppTargetAddr(inboundPorts)
+	if inboundPorts == "" {
+		s.logger.Printf("no application container ports detected for pod %q/%q", namespace, pod.Name)
+	}
 
 	if !hasContainerByName(pod.Spec.InitContainers, containerNameIptables) {
 		initContainer := s.buildIptablesContainer(inboundPorts, uidString)
@@ -147,7 +173,7 @@ func (s *Service) BuildPatch(request *admissionv1.AdmissionRequest, pod *corev1.
 	}
 
 	if !hasContainerByName(pod.Spec.Containers, containerNameSidecar) {
-		sidecar := s.buildSidecarContainer(serviceAccountName, uid)
+		sidecar := s.buildSidecarContainer(serviceAccountName, uid, appTargetAddr)
 
 		if len(pod.Spec.Containers) == 0 {
 			operations = append(operations, patchOperation{
@@ -174,7 +200,15 @@ func (s *Service) BuildPatch(request *admissionv1.AdmissionRequest, pod *corev1.
 		return Decision{}, fmt.Errorf("marshal json patch: %w", err)
 	}
 
-	s.logger.Printf("inject sidecar into pod %q/%q", namespace, pod.Name)
+	s.logger.Printf(
+		"inject sidecar into pod %q/%q operation=%s serviceAccount=%q inboundPorts=%q appTarget=%q",
+		namespace,
+		pod.Name,
+		request.Operation,
+		serviceAccountName,
+		inboundPorts,
+		appTargetAddr,
+	)
 
 	return Decision{Patch: patch, Mutated: true}, nil
 }
@@ -347,7 +381,7 @@ func (s *Service) buildIptablesContainer(inboundPorts string, uid string) corev1
 	}
 }
 
-func (s *Service) buildSidecarContainer(serviceAccountName string, uid int64) corev1.Container {
+func (s *Service) buildSidecarContainer(serviceAccountName string, uid int64, appTargetAddr string) corev1.Container {
 	runAsNonRoot := true
 
 	return corev1.Container{
@@ -362,6 +396,7 @@ func (s *Service) buildSidecarContainer(serviceAccountName string, uid int64) co
 			{Name: "mesh-mtls", ContainerPort: int32(s.cfg.InboundMTLSPort)},
 			{Name: "mesh-outbound", ContainerPort: int32(s.cfg.OutboundPort)},
 			{Name: "mesh-inbound", ContainerPort: int32(s.cfg.InboundPlainPort)},
+			{Name: "mesh-metrics", ContainerPort: int32(s.cfg.MetricsPort), Protocol: corev1.ProtocolTCP},
 		},
 		Env: []corev1.EnvVar{
 			{
@@ -377,6 +412,7 @@ func (s *Service) buildSidecarContainer(serviceAccountName string, uid int64) co
 				},
 			},
 			{Name: "SERVICE_ACCOUNT", Value: serviceAccountName},
+			{Name: "APP_TARGET_ADDR", Value: appTargetAddr},
 			{Name: "INBOUND_PLAIN_PORT", Value: strconv.Itoa(s.cfg.InboundPlainPort)},
 			{Name: "OUTBOUND_PORT", Value: strconv.Itoa(s.cfg.OutboundPort)},
 			{Name: "INBOUND_MTLS_PORT", Value: strconv.Itoa(s.cfg.InboundMTLSPort)},
@@ -394,4 +430,23 @@ func (s *Service) buildSidecarContainer(serviceAccountName string, uid int64) co
 			{Name: volumeNameMeshCA, MountPath: "/etc/mesh/ca", ReadOnly: true},
 		},
 	}
+}
+
+func deriveAppTargetAddr(inboundPorts string) string {
+	inboundPorts = strings.TrimSpace(inboundPorts)
+	if inboundPorts == "" {
+		return "127.0.0.1:8080"
+	}
+
+	first := inboundPorts
+	if idx := strings.Index(inboundPorts, ","); idx >= 0 {
+		first = inboundPorts[:idx]
+	}
+
+	first = strings.TrimSpace(first)
+	if first == "" {
+		return "127.0.0.1:8080"
+	}
+
+	return "127.0.0.1:" + first
 }

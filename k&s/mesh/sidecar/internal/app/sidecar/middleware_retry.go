@@ -1,6 +1,7 @@
 package sidecar
 
 import (
+	"log/slog"
 	"math"
 	"time"
 
@@ -33,11 +34,15 @@ func (m *retryMiddleware) Handle(ctx *domain.ConnContext, next domain.NextFunc) 
 	for attempt := 1; attempt <= m.attempts; attempt++ {
 		err := next(ctx)
 		if err == nil {
+			if attempt > 1 {
+				slog.Info("retry middleware recovered", slog.Int("attempt", attempt))
+			}
 			return nil
 		}
 
 		lastErr = err
 		if !domain.IsEstablishError(err) {
+			slog.Debug("retry middleware skipped non-establish error", slog.Any("error", err))
 			return err
 		}
 
@@ -49,6 +54,14 @@ func (m *retryMiddleware) Handle(ctx *domain.ConnContext, next domain.NextFunc) 
 		m.recorder.IncRetry(service)
 
 		waitFor := m.backoffDuration(attempt)
+		slog.Warn(
+			"retry middleware scheduling reconnect",
+			slog.String("service", service),
+			slog.Int("attempt", attempt),
+			slog.Int("max_attempts", m.attempts),
+			slog.Duration("backoff", waitFor),
+			slog.Any("error", err),
+		)
 		select {
 		case <-ctx.Context.Done():
 			return domain.Wrap(domain.ErrorKindTimeout, ctx.Context.Err())

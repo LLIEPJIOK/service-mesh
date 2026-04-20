@@ -2,6 +2,7 @@ package sidecar
 
 import (
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -74,15 +75,18 @@ func (m *breakerMiddleware) allow(key string, service string) error {
 	switch entry.state {
 	case breakerStateOpen:
 		if now.Sub(entry.openedAt) < m.recoveryTime {
+			slog.Warn("circuit breaker rejected request", slog.String("key", key), slog.Int("state", entry.state))
 			return domain.Wrap(domain.ErrorKindBreakerOpen, fmt.Errorf("circuit breaker is open for %s", key))
 		}
 
+		slog.Info("circuit breaker transition", slog.String("key", key), slog.Int("from", breakerStateOpen), slog.Int("to", breakerStateHalf))
 		entry.state = breakerStateHalf
 		entry.trialInFlight = false
 		m.recorder.SetCircuitBreakerState(service, breakerStateHalf)
 		fallthrough
 	case breakerStateHalf:
 		if entry.trialInFlight {
+			slog.Warn("circuit breaker rejected parallel half-open request", slog.String("key", key))
 			return domain.Wrap(domain.ErrorKindBreakerOpen, fmt.Errorf("circuit breaker is half-open for %s", key))
 		}
 
@@ -97,10 +101,14 @@ func (m *breakerMiddleware) recordSuccess(key string, service string) {
 	defer m.mu.Unlock()
 
 	entry := m.getOrCreateEntry(key, service)
+	previousState := entry.state
 	entry.state = breakerStateClosed
 	entry.failures = 0
 	entry.trialInFlight = false
 	m.recorder.SetCircuitBreakerState(service, breakerStateClosed)
+	if previousState != breakerStateClosed {
+		slog.Info("circuit breaker transition", slog.String("key", key), slog.Int("from", previousState), slog.Int("to", breakerStateClosed))
+	}
 }
 
 func (m *breakerMiddleware) recordFailure(key string, service string) {
@@ -108,6 +116,7 @@ func (m *breakerMiddleware) recordFailure(key string, service string) {
 	defer m.mu.Unlock()
 
 	entry := m.getOrCreateEntry(key, service)
+	previousState := entry.state
 	now := time.Now()
 
 	switch entry.state {
@@ -117,10 +126,12 @@ func (m *breakerMiddleware) recordFailure(key string, service string) {
 		entry.failures = m.failureThreshold
 		entry.trialInFlight = false
 		m.recorder.SetCircuitBreakerState(service, breakerStateOpen)
+		slog.Info("circuit breaker transition", slog.String("key", key), slog.Int("from", previousState), slog.Int("to", breakerStateOpen), slog.Uint64("failures", uint64(entry.failures)))
 		return
 	case breakerStateOpen:
 		entry.openedAt = now
 		m.recorder.SetCircuitBreakerState(service, breakerStateOpen)
+		slog.Debug("circuit breaker remains open", slog.String("key", key), slog.Uint64("failures", uint64(entry.failures)))
 		return
 	}
 
@@ -130,6 +141,7 @@ func (m *breakerMiddleware) recordFailure(key string, service string) {
 		entry.openedAt = now
 		entry.trialInFlight = false
 		m.recorder.SetCircuitBreakerState(service, breakerStateOpen)
+		slog.Info("circuit breaker transition", slog.String("key", key), slog.Int("from", previousState), slog.Int("to", breakerStateOpen), slog.Uint64("failures", uint64(entry.failures)))
 		return
 	}
 

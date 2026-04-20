@@ -64,6 +64,36 @@
 
 Эти ресурсы являются частью платформенной группы и должны оставаться в install-order, описанном в [Mesh CLI](../mesh/installer/README.md).
 
+## Bookinfo workload манифесты
+
+Полный набор манифестов Bookinfo расположен в [app/bookinfo/manifests](../app/bookinfo/manifests/README.md):
+
+- namespace `bookinfo` с меткой `mesh-injection: enabled`;
+- `ServiceAccount` для каждого сервиса;
+- `Role`/`RoleBinding` для service discovery sidecar;
+- deployment'ы `productpage/details/ratings/reviews(v1,v2,v3)`;
+- сервисы, включая `productpage` (`NodePort: 31380`) для fallback-доступа;
+- ingress `productpage` (класс `nginx`) как основной способ доступа в minikube.
+
+## Monitoring манифесты
+
+Набор для наблюдаемости расположен в [monitoring](./monitoring/README.md):
+
+- `00-monitoring-namespace.yaml`;
+- `01-bookinfo-sidecar-podmonitor.yaml`;
+- `02-grafana-ingress.yaml`;
+- `03-grafana-dashboard-sidecar-apps.yaml`;
+- `kube-prometheus-stack-values.yaml` для установки `kube-prometheus-stack`.
+
+## Скрипты запуска для minikube
+
+В каталоге `manifest/scripts/` добавлены утилиты MVP:
+
+- `build-and-load-mesh-images-minikube.sh` — сборка и загрузка mesh-образов в minikube cache;
+- `generate-mesh-config-minikube.sh` — генерация root CA и `manifest/generated/mesh-config.minikube.yaml`;
+- `install-monitoring-minikube.sh` — установка Prometheus/Grafana и PodMonitor;
+- `deploy-bookinfo-minikube.sh` — деплой Bookinfo, включение ingress addon и ожидание rollout.
+
 ## Acceptance criteria
 
 | Критерий          | Условие                                                          |

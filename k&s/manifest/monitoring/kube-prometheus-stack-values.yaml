@@ -1,0 +1,29 @@
+grafana:
+  enabled: true
+  adminUser: admin
+  adminPassword: admin
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: monitoring
+      provider:
+        allowUiUpdates: false
+  service:
+    type: NodePort
+    nodePort: 32000
+
+alertmanager:
+  enabled: false
+
+prometheus:
+  service:
+    type: NodePort
+    nodePort: 32001
+  prometheusSpec:
+    podMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorNamespaceSelector: {}
+    serviceMonitorNamespaceSelector: {}
+    scrapeInterval: 15s

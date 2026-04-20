@@ -1,0 +1,21 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: bookinfo-sidecar
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: bookinfo-sidecar
+    app.kubernetes.io/part-of: service-mesh-demo
+    release: mesh-monitoring
+spec:
+  namespaceSelector:
+    matchNames:
+      - bookinfo
+  selector:
+    matchLabels:
+      app.kubernetes.io/part-of: bookinfo
+  podMetricsEndpoints:
+    - path: /metrics
+      port: mesh-metrics
+      interval: 15s
+      scrapeTimeout: 10s

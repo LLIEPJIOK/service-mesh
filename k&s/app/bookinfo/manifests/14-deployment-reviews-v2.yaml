@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reviews-v2
+  namespace: bookinfo
+  labels:
+    app: reviews
+    version: v2
+    app.kubernetes.io/name: reviews
+    app.kubernetes.io/version: v2
+    app.kubernetes.io/part-of: bookinfo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reviews
+      version: v2
+  template:
+    metadata:
+      labels:
+        app: reviews
+        version: v2
+        app.kubernetes.io/name: reviews
+        app.kubernetes.io/version: v2
+        app.kubernetes.io/part-of: bookinfo
+    spec:
+      serviceAccountName: reviews
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: reviews
+          image: docker.io/istio/examples-bookinfo-reviews-v2:1.20.3
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 9080
+          env:
+            - name: ENABLE_RATINGS
+              value: "true"
+          readinessProbe:
+            tcpSocket:
+              port: 9080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 6
+          livenessProbe:
+            tcpSocket:
+              port: 9080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 40m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]

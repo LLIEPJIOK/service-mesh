@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"strings"
 	"time"
@@ -33,6 +34,13 @@ func (f *Forwarder) Handle(ctx *domain.ConnContext) error {
 	inMesh := ctx.GetBool(domain.MetadataInMesh)
 	serverName := ctx.GetString(domain.MetadataServerName)
 
+	slog.Debug(
+		"forward routing decision",
+		slog.String("target", targetAddr),
+		slog.Bool("in_mesh", inMesh),
+		slog.String("server_name", serverName),
+	)
+
 	var (
 		targetConn net.Conn
 		err        error
@@ -40,19 +48,35 @@ func (f *Forwarder) Handle(ctx *domain.ConnContext) error {
 
 	if inMesh {
 		if f.TLSConfig == nil {
+			slog.Error("forward mTLS dial skipped due to missing tls config", slog.String("target", targetAddr))
 			return domain.Wrap(domain.ErrorKindTLS, fmt.Errorf("invalid tls configuration"))
 		}
 
 		targetConn, err = DialMTLS(ctx.Context, targetAddr, serverName, f.TLSConfig, f.DialTimeout)
 		if err != nil {
+			slog.Warn(
+				"forward mTLS dial failed",
+				slog.String("target", targetAddr),
+				slog.String("server_name", serverName),
+				slog.Any("error", err),
+			)
 			return err
 		}
+
+		slog.Info(
+			"forward mTLS dial established",
+			slog.String("target", targetAddr),
+			slog.String("server_name", serverName),
+		)
 	} else {
 		dialer := &net.Dialer{Timeout: f.DialTimeout}
 		targetConn, err = dialer.DialContext(ctx.Context, "tcp", targetAddr)
 		if err != nil {
+			slog.Warn("forward plain dial failed", slog.String("target", targetAddr), slog.Any("error", err))
 			return domain.ClassifyDialError(err)
 		}
+
+		slog.Debug("forward plain dial established", slog.String("target", targetAddr))
 	}
 	defer targetConn.Close()
 

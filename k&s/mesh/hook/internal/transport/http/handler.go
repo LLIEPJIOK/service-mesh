@@ -89,6 +89,14 @@ func (h *Handler) handleMutate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.logger.Printf(
+		"admission request uid=%s operation=%s namespace=%q pod=%q",
+		review.Request.UID,
+		review.Request.Operation,
+		review.Request.Namespace,
+		pod.Name,
+	)
+
 	decision, err := h.service.BuildPatch(review.Request, &pod)
 	if err != nil {
 		h.logger.Printf("build patch: %v", err)
@@ -107,6 +115,7 @@ func (h *Handler) handleMutate(w http.ResponseWriter, r *http.Request) {
 		patchType := admissionv1.PatchTypeJSONPatch
 		response.PatchType = &patchType
 		response.Patch = decision.Patch
+		h.logger.Printf("admission mutation applied uid=%s namespace=%q pod=%q", review.Request.UID, review.Request.Namespace, pod.Name)
 	} else {
 		h.logger.Printf("pod %q/%q not mutated: %s", review.Request.Namespace, pod.Name, decision.SkipReason)
 	}

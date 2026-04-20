@@ -39,6 +39,61 @@ BookInfo - эталонное demo-приложение (источник: [Isti
 - Бенчмарк производительности относительно Istio.
 - Полная функциональная проверка всех edge-case сценариев приложения.
 
+## Манифесты и запуск в minikube
+
+Готовый набор манифестов расположен в каталоге `manifests/`.
+
+Применение:
+
+```bash
+kubectl apply -k k\&s/app/bookinfo/manifests
+```
+
+Проверка rollout:
+
+```bash
+kubectl rollout status deployment/productpage-v1 -n bookinfo --timeout=10s
+kubectl rollout status deployment/details-v1 -n bookinfo --timeout=10s
+kubectl rollout status deployment/ratings-v1 -n bookinfo --timeout=10s
+kubectl rollout status deployment/reviews-v1 -n bookinfo --timeout=10s
+kubectl rollout status deployment/reviews-v2 -n bookinfo --timeout=10s
+kubectl rollout status deployment/reviews-v3 -n bookinfo --timeout=10s
+```
+
+Открытие страницы в браузере:
+
+```bash
+minikube addons enable ingress
+kubectl rollout status deployment/ingress-nginx-controller -n ingress-nginx --timeout=120s
+minikube tunnel
+```
+
+В отдельном терминале:
+
+```bash
+echo "http://127.0.0.1/productpage"
+```
+
+Ожидаемый путь: `/productpage`.
+
+Fallback через NodePort (если ingress временно недоступен):
+
+```bash
+echo "http://$(minikube ip):31380/productpage"
+```
+
+## Проверка распределения по reviews
+
+Сгенерируйте серию запросов:
+
+```bash
+for i in $(seq 1 20); do
+	curl -s "http://127.0.0.1/productpage" | grep -E "(Reviews served by|glyphicon-star|color=black)" | head -n 1
+done
+```
+
+В серии ответов должны появляться признаки `reviews-v1`, `reviews-v2`, `reviews-v3`.
+
 > [!IMPORTANT]
 > Нужно показать работоспособность распределения трафика на сервисы ревью
 

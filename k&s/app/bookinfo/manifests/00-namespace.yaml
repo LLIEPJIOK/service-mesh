@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bookinfo
+  labels:
+    app.kubernetes.io/name: bookinfo
+    app.kubernetes.io/part-of: service-mesh-demo
+    mesh-injection: enabled

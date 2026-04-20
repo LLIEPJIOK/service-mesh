@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,6 +42,7 @@ func NewTokenReviewer(kubeConfigPath string) (*TokenReviewer, error) {
 func (t *TokenReviewer) ValidateToken(ctx context.Context, token string) (domain.Identity, error) {
 	token = strings.TrimSpace(token)
 	if token == "" {
+		slog.Warn("tokenreview rejected empty token")
 		return domain.Identity{}, domain.ErrUnauthorized
 	}
 
@@ -53,18 +55,22 @@ func (t *TokenReviewer) ValidateToken(ctx context.Context, token string) (domain
 		Create(ctx, review, metav1.CreateOptions{})
 	if err != nil {
 		if k8serrors.IsForbidden(err) {
+			slog.Warn("tokenreview forbidden", slog.Any("error", err))
 			return domain.Identity{}, fmt.Errorf("%w: %v", domain.ErrForbidden, err)
 		}
 
 		if k8serrors.IsUnauthorized(err) {
+			slog.Warn("tokenreview unauthorized", slog.Any("error", err))
 			return domain.Identity{}, fmt.Errorf("%w: %v", domain.ErrUnauthorized, err)
 		}
 
+		slog.Warn("tokenreview call failed", slog.Any("error", err))
 		return domain.Identity{}, fmt.Errorf("tokenreview call failed: %w", err)
 	}
 
 	if !response.Status.Authenticated {
 		if strings.TrimSpace(response.Status.Error) != "" {
+			slog.Warn("tokenreview authentication failed", slog.String("reason", response.Status.Error))
 			return domain.Identity{}, fmt.Errorf(
 				"%w: %s",
 				domain.ErrUnauthorized,
@@ -72,13 +78,21 @@ func (t *TokenReviewer) ValidateToken(ctx context.Context, token string) (domain
 			)
 		}
 
+		slog.Warn("tokenreview authentication failed without explicit reason")
 		return domain.Identity{}, domain.ErrUnauthorized
 	}
 
 	identity, parseErr := parseServiceAccountUsername(response.Status.User.Username)
 	if parseErr != nil {
+		slog.Warn("tokenreview identity parse failed", slog.String("username", response.Status.User.Username), slog.Any("error", parseErr))
 		return domain.Identity{}, fmt.Errorf("%w: %v", domain.ErrForbidden, parseErr)
 	}
+
+	slog.Info(
+		"tokenreview authenticated service account",
+		slog.String("namespace", identity.Namespace),
+		slog.String("service_account", identity.ServiceAccount),
+	)
 
 	return identity, nil
 }

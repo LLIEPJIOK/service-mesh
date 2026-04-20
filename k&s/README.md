@@ -61,6 +61,32 @@
 - Много-кластерные сценарии.
 - Production-hardening за рамками smoke-проверок.
 
+## Быстрый старт на minikube
+
+```bash
+# 1) Собрать и загрузить mesh-образы в minikube
+k\&s/manifest/scripts/build-and-load-mesh-images-minikube.sh
+
+# 2) Сгенерировать MeshConfig с локальным root CA
+k\&s/manifest/scripts/generate-mesh-config-minikube.sh
+
+# 3) Установить mesh
+cd k\&s/mesh/installer
+go run ./cmd/mesh install -f ../../manifest/generated/mesh-config.minikube.yaml --wait --timeout 5m
+
+# 4) Развернуть Bookinfo
+k\&s/manifest/scripts/deploy-bookinfo-minikube.sh
+
+# 5) Поднять мониторинг (Prometheus + Grafana)
+k\&s/manifest/scripts/install-monitoring-minikube.sh
+```
+
+Проверка страницы Bookinfo:
+
+```bash
+open "http://$(minikube ip):31380/productpage"
+```
+
 ## Связанные разделы
 
 - [BookInfo приложение](app/bookinfo/README.md)
