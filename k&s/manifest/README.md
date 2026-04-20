@@ -49,6 +49,21 @@
 > [!IMPORTANT]
 > Перед применением `mesh-sidecar-injector.yaml` должен быть доступен TLS-секрет `mesh-webhook-tls` и заполнен `caBundle` в `MutatingWebhookConfiguration`.
 
+## Платформенные ресурсы, применяемые installer из MeshConfig
+
+Помимо файлового набора webhook, `mesh install` в MVP дополнительно применяет платформенные ресурсы, которые формируются из `MeshConfig`:
+
+- Secret `mesh-root-ca` (корневой CA, источник из `spec.certificates.rootCA`).
+- Secret `mesh-webhook-tls` (TLS для webhook-сервера, подписывается корневым CA).
+- ServiceAccount `cert-manager`.
+- ClusterRole `cert-manager-tokenreviewer`.
+- ClusterRoleBinding `cert-manager-tokenreviewer-binding`.
+- Deployment `mesh-cert-manager`.
+- Service `mesh-cert-manager`.
+- ConfigMap `mesh-sidecar-config` (канонические sidecar defaults).
+
+Эти ресурсы являются частью платформенной группы и должны оставаться в install-order, описанном в [Mesh CLI](../mesh/installer/README.md).
+
 ## Acceptance criteria
 
 | Критерий          | Условие                                                          |

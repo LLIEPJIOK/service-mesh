@@ -40,7 +40,7 @@ Mesh CLI - это утилита командной строки на Go (Cobra)
 
 1. CLI MUST использовать `mesh-system` как namespace по умолчанию.
 2. CLI MUST позволять переопределить namespace флагом `--namespace/-n`.
-3. CLI SHOULD выдавать предупреждение, если root CA не задан и генерируется автоматически.
+3. CLI MUST завершать установку ошибкой, если root CA не задан в конфигурации.
 4. CLI MUST определять kubeconfig в порядке: `--kubeconfig` -> `KUBECONFIG` -> `~/.kube/config` -> in-cluster config.
 5. CLI SHOULD предупреждать о потенциальной несовместимости версии CLI и `spec.version`.
 6. CLI MUST разрешать переопределение образов через `spec.images.*`; при отсутствии override использовать версии, согласованные с `spec.version`.
@@ -175,7 +175,7 @@ spec:
 - `spec.sidecar.inboundMTLSPort`
 
 > [!IMPORTANT]
-> Если корневой CA не указан, CLI может сгенерировать самоподписанный сертификат автоматически (с выводом предупреждения). Однако для production окружения **настоятельно** рекомендуется предоставить собственный CA.
+> В текущем MVP root CA (сертификат и ключ) является обязательной частью `MeshConfig`. Если `spec.certificates.rootCA.cert` или `spec.certificates.rootCA.key` отсутствуют, команда `mesh install` завершается ошибкой валидации.
 
 ## Порядок установки
 
@@ -228,6 +228,49 @@ spec:
 | Uninstall          | `mesh uninstall` удаляет mesh-компоненты в безопасном порядке            |
 | Namespace handling | При `--delete-namespace` namespace удаляется в конце процесса            |
 | Idempotency        | Повторный uninstall не падает из-за отсутствующих ресурсов               |
+
+## Практические команды (MVP)
+
+Запускайте команды из директории `k&s/mesh/installer`.
+
+```bash
+cd k\&s/mesh/installer
+```
+
+### Локальная проверка и сборка
+
+```bash
+make fmt
+make vet
+make test
+make build
+```
+
+Бинарник CLI будет создан в `bin/mesh`.
+
+### Сборка Docker-образа
+
+```bash
+make docker-build VERSION=v0.1.0 DOCKERHUB_NAMESPACE=lliepjiok IMAGE_NAME=mesh-installer
+```
+
+Команда собирает образ и выставляет 2 тега:
+
+- `lliepjiok/mesh-installer:v0.1.0`
+- `lliepjiok/mesh-installer:latest`
+
+### Push в Docker Hub
+
+```bash
+docker login
+make docker-push VERSION=v0.1.0 DOCKERHUB_NAMESPACE=lliepjiok IMAGE_NAME=mesh-installer
+```
+
+Для полного цикла (build + push):
+
+```bash
+make docker-build-push VERSION=v0.1.0 DOCKERHUB_NAMESPACE=lliepjiok IMAGE_NAME=mesh-installer
+```
 
 ## Структура кода (Cobra)
 
