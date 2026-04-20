@@ -28,6 +28,27 @@
 > [!NOTE]
 > В MVP этот файл остается минимальным индексом. По мере появления реальных YAML-пакетов сюда добавляются ссылки на конкретные каталоги/файлы.
 
+## Текущий набор MVP манифестов
+
+Платформенные ресурсы webhook-инжектора размещены отдельными файлами (один ресурс на файл):
+
+- `mesh-system-namespace.yaml` - namespace `mesh-system`.
+- `mesh-webhook-serviceaccount.yaml` - service account webhook-сервера.
+- `mesh-webhook-deployment.yaml` - deployment webhook-сервера.
+- `mesh-webhook-service.yaml` - service для admission webhook.
+- `mesh-sidecar-injector.yaml` - `MutatingWebhookConfiguration` для мутации pod.
+
+Порядок применения этого набора:
+
+1. `mesh-system-namespace.yaml`
+2. `mesh-webhook-serviceaccount.yaml`
+3. `mesh-webhook-deployment.yaml`
+4. `mesh-webhook-service.yaml`
+5. `mesh-sidecar-injector.yaml`
+
+> [!IMPORTANT]
+> Перед применением `mesh-sidecar-injector.yaml` должен быть доступен TLS-секрет `mesh-webhook-tls` и заполнен `caBundle` в `MutatingWebhookConfiguration`.
+
 ## Acceptance criteria
 
 | Критерий          | Условие                                                          |
