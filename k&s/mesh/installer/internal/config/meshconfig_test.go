@@ -66,4 +66,51 @@ spec:
 	if cfg.Spec.Namespace != "mesh-system" {
 		t.Fatalf("unexpected namespace: %s", cfg.Spec.Namespace)
 	}
+
+	if !cfg.Spec.Sidecar.MTLSEnabledValue() {
+		t.Fatalf("expected mTLS to be enabled by default")
+	}
+}
+
+func TestLoadFromFileDisablesMTLSWhenExplicitlyConfigured(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mesh.yaml")
+
+	content := `apiVersion: mesh.io/v1alpha1
+kind: MeshConfig
+spec:
+  namespace: mesh-system
+  certificates:
+    rootCA:
+      cert: |-
+        -----BEGIN CERTIFICATE-----
+        test
+        -----END CERTIFICATE-----
+      key: |-
+        -----BEGIN RSA PRIVATE KEY-----
+        test
+        -----END RSA PRIVATE KEY-----
+  sidecar:
+    inboundPlainPort: 15006
+    outboundPort: 15002
+    inboundMTLSPort: 0
+    mtlsEnabled: false
+`
+
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	cfg, err := LoadFromFile(path)
+	if err != nil {
+		t.Fatalf("LoadFromFile() error = %v", err)
+	}
+
+	if cfg.Spec.Sidecar.MTLSEnabledValue() {
+		t.Fatalf("expected mTLS to be disabled")
+	}
+
+	if cfg.Spec.Sidecar.InboundMTLSPort != 0 {
+		t.Fatalf("expected inbound mTLS port to stay disabled, got %d", cfg.Spec.Sidecar.InboundMTLSPort)
+	}
 }

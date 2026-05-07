@@ -15,7 +15,9 @@ import (
 type routingMiddleware struct {
 	cache              *discovery.ServiceCache
 	appTargetAddr      string
+	inboundPlainPort   int
 	inboundMTLSPort    int
+	mtlsEnabled        bool
 	loadBalancerPolicy string
 
 	mu              sync.Mutex
@@ -26,13 +28,17 @@ type routingMiddleware struct {
 func newRoutingMiddleware(
 	cache *discovery.ServiceCache,
 	appTargetAddr string,
+	inboundPlainPort int,
 	inboundMTLSPort int,
+	mtlsEnabled bool,
 	loadBalancerPolicy string,
 ) *routingMiddleware {
 	return &routingMiddleware{
 		cache:              cache,
 		appTargetAddr:      appTargetAddr,
+		inboundPlainPort:   inboundPlainPort,
 		inboundMTLSPort:    inboundMTLSPort,
+		mtlsEnabled:        mtlsEnabled,
 		loadBalancerPolicy: loadBalancerPolicy,
 		roundRobinState:    make(map[string]int),
 		rnd:                rand.New(rand.NewSource(time.Now().UnixNano())),
@@ -66,18 +72,30 @@ func (m *routingMiddleware) routeOutbound(ctx *domain.ConnContext, next domain.N
 	}
 
 	selected := m.selectEndpoint(ctx.OriginalDst, endpoints)
-	targetAddr := net.JoinHostPort(selected.IP, strconv.Itoa(m.inboundMTLSPort))
+	targetPort := m.inboundPlainPort
+	if m.mtlsEnabled {
+		targetPort = m.inboundMTLSPort
+	}
+	targetAddr := net.JoinHostPort(selected.IP, strconv.Itoa(targetPort))
 
 	ctx.Set(domain.MetadataTargetAddr, targetAddr)
 	ctx.Set(domain.MetadataService, selected.ServiceName)
-	ctx.Set(domain.MetadataInMesh, true)
-	ctx.Set(domain.MetadataServerName, selected.ServiceName)
+	ctx.Set(domain.MetadataInMesh, m.mtlsEnabled)
+	if m.mtlsEnabled {
+		ctx.Set(domain.MetadataServerName, selected.ServiceName)
+	} else {
+		ctx.Set(domain.MetadataServerName, "")
+	}
 	ctx.Set(domain.MetadataBreakerKey, targetAddr)
 
 	return next(ctx)
 }
 
 func (m *routingMiddleware) selectEndpoint(key string, endpoints []domain.Endpoint) domain.Endpoint {
+	if m.loadBalancerPolicy == "none" {
+		return endpoints[0]
+	}
+
 	if m.loadBalancerPolicy == "random" {
 		m.mu.Lock()
 		defer m.mu.Unlock()

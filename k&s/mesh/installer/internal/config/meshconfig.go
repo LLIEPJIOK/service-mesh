@@ -49,6 +49,7 @@ type SidecarConfig struct {
 	InboundPlainPort      int            `yaml:"inboundPlainPort"`
 	OutboundPort          int            `yaml:"outboundPort"`
 	InboundMTLSPort       int            `yaml:"inboundMTLSPort"`
+	MTLSEnabled           *bool          `yaml:"mtlsEnabled,omitempty"`
 	MetricsPort           int            `yaml:"metricsPort"`
 	MonitoringEnabled     bool           `yaml:"monitoringEnabled"`
 	LoadBalancerAlgorithm string         `yaml:"loadBalancerAlgorithm"`
@@ -87,6 +88,14 @@ type CertManager struct {
 	Resources map[string]interface{} `yaml:"resources"`
 }
 
+func (c SidecarConfig) MTLSEnabledValue() bool {
+	if c.MTLSEnabled == nil {
+		return c.InboundMTLSPort > 0
+	}
+
+	return *c.MTLSEnabled
+}
+
 func LoadFromFile(path string) (MeshConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -121,6 +130,24 @@ func (c *MeshConfig) ApplyDefaults() {
 	if strings.TrimSpace(c.Spec.Sidecar.LoadBalancerAlgorithm) == "" {
 		c.Spec.Sidecar.LoadBalancerAlgorithm = "roundRobin"
 	}
+
+	if c.Spec.Sidecar.MTLSEnabled == nil {
+		if c.Spec.Sidecar.InboundMTLSPort == 0 {
+			c.Spec.Sidecar.InboundMTLSPort = 15001
+		}
+
+		enabled := c.Spec.Sidecar.InboundMTLSPort > 0
+		c.Spec.Sidecar.MTLSEnabled = boolPtr(enabled)
+	}
+
+	if c.Spec.Sidecar.MTLSEnabledValue() && c.Spec.Sidecar.InboundMTLSPort == 0 {
+		c.Spec.Sidecar.InboundMTLSPort = 15001
+	}
+
+	if !c.Spec.Sidecar.MTLSEnabledValue() {
+		c.Spec.Sidecar.InboundMTLSPort = 0
+	}
+
 	if strings.TrimSpace(c.Spec.Sidecar.Timeout) == "" {
 		c.Spec.Sidecar.Timeout = "5s"
 	}
@@ -173,8 +200,12 @@ func (c MeshConfig) Validate() error {
 	if c.Spec.Sidecar.OutboundPort <= 0 {
 		return fmt.Errorf("spec.sidecar.outboundPort must be positive")
 	}
-	if c.Spec.Sidecar.InboundMTLSPort <= 0 {
-		return fmt.Errorf("spec.sidecar.inboundMTLSPort must be positive")
+	if c.Spec.Sidecar.InboundMTLSPort < 0 {
+		return fmt.Errorf("spec.sidecar.inboundMTLSPort must be non-negative")
+	}
+
+	if c.Spec.Sidecar.MTLSEnabledValue() && c.Spec.Sidecar.InboundMTLSPort <= 0 {
+		return fmt.Errorf("spec.sidecar.inboundMTLSPort must be positive when spec.sidecar.mtlsEnabled=true")
 	}
 
 	if strings.TrimSpace(c.Spec.Certificates.RootCA.Cert) == "" || strings.TrimSpace(c.Spec.Certificates.RootCA.Key) == "" {
@@ -182,4 +213,8 @@ func (c MeshConfig) Validate() error {
 	}
 
 	return nil
+}
+
+func boolPtr(value bool) *bool {
+	return &value
 }

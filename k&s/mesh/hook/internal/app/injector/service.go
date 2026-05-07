@@ -383,6 +383,15 @@ func (s *Service) buildIptablesContainer(inboundPorts string, uid string) corev1
 
 func (s *Service) buildSidecarContainer(serviceAccountName string, uid int64, appTargetAddr string) corev1.Container {
 	runAsNonRoot := true
+	ports := []corev1.ContainerPort{
+		{Name: "mesh-outbound", ContainerPort: int32(s.cfg.OutboundPort)},
+		{Name: "mesh-inbound", ContainerPort: int32(s.cfg.InboundPlainPort)},
+		{Name: "mesh-metrics", ContainerPort: int32(s.cfg.MetricsPort), Protocol: corev1.ProtocolTCP},
+	}
+
+	if s.cfg.MTLSEnabled && s.cfg.InboundMTLSPort > 0 {
+		ports = append([]corev1.ContainerPort{{Name: "mesh-mtls", ContainerPort: int32(s.cfg.InboundMTLSPort)}}, ports...)
+	}
 
 	return corev1.Container{
 		Name:            containerNameSidecar,
@@ -392,12 +401,7 @@ func (s *Service) buildSidecarContainer(serviceAccountName string, uid int64, ap
 			RunAsNonRoot: &runAsNonRoot,
 			RunAsUser:    &uid,
 		},
-		Ports: []corev1.ContainerPort{
-			{Name: "mesh-mtls", ContainerPort: int32(s.cfg.InboundMTLSPort)},
-			{Name: "mesh-outbound", ContainerPort: int32(s.cfg.OutboundPort)},
-			{Name: "mesh-inbound", ContainerPort: int32(s.cfg.InboundPlainPort)},
-			{Name: "mesh-metrics", ContainerPort: int32(s.cfg.MetricsPort), Protocol: corev1.ProtocolTCP},
-		},
+		Ports: ports,
 		Env: []corev1.EnvVar{
 			{
 				Name: "POD_NAME",
@@ -416,7 +420,9 @@ func (s *Service) buildSidecarContainer(serviceAccountName string, uid int64, ap
 			{Name: "INBOUND_PLAIN_PORT", Value: strconv.Itoa(s.cfg.InboundPlainPort)},
 			{Name: "OUTBOUND_PORT", Value: strconv.Itoa(s.cfg.OutboundPort)},
 			{Name: "INBOUND_MTLS_PORT", Value: strconv.Itoa(s.cfg.InboundMTLSPort)},
+			{Name: "MTLS_ENABLED", Value: strconv.FormatBool(s.cfg.MTLSEnabled)},
 			{Name: "METRICS_PORT", Value: strconv.Itoa(s.cfg.MetricsPort)},
+			{Name: "BOOTSTRAP_CERTIFICATES", Value: strconv.FormatBool(s.cfg.MTLSEnabled)},
 			{Name: "CERT_FILE", Value: "/etc/mesh/certs/tls.crt"},
 			{Name: "KEY_FILE", Value: "/etc/mesh/certs/tls.key"},
 			{Name: "CA_FILE", Value: "/etc/mesh/ca/ca.crt"},

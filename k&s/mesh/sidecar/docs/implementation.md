@@ -53,11 +53,11 @@ type Handler interface {
 
 ## Профили listener'ов
 
-| Профиль  | Порт               | Назначение                        | Специфика                  |
-| -------- | ------------------ | --------------------------------- | -------------------------- |
-| incoming | `inboundPlainPort` | Входящий plain-трафик             | REDIRECT из PREROUTING     |
-| outgoing | `outboundPort`     | Исходящий трафик приложения       | REDIRECT из OUTPUT         |
-| mtls     | `inboundMTLSPort`  | Входящий трафик от других sidecar | Прямой listen без REDIRECT |
+| Профиль  | Порт               | Назначение                        | Специфика                                                        |
+| -------- | ------------------ | --------------------------------- | ---------------------------------------------------------------- |
+| incoming | `inboundPlainPort` | Входящий plain-трафик             | REDIRECT из PREROUTING                                           |
+| outgoing | `outboundPort`     | Исходящий трафик приложения       | REDIRECT из OUTPUT                                               |
+| mtls     | `inboundMTLSPort`  | Входящий трафик от других sidecar | Прямой listen без REDIRECT (опционально, при `mtlsEnabled=true`) |
 
 ## Поток обработки соединения
 

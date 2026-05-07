@@ -46,6 +46,7 @@ $(indent_pem < "${CA_KEY_FILE}")
     inboundPlainPort: 15006
     outboundPort: 15002
     inboundMTLSPort: 15001
+    mtlsEnabled: true
     metricsPort: 9090
     monitoringEnabled: true
     loadBalancerAlgorithm: roundRobin

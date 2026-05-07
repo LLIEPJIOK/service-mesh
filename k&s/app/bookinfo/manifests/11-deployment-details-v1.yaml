@@ -35,20 +35,26 @@ spec:
           ports:
             - name: http
               containerPort: 9080
+          startupProbe:
+            tcpSocket:
+              port: 9080
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30
           readinessProbe:
             tcpSocket:
               port: 9080
-            initialDelaySeconds: 5
+            initialDelaySeconds: 10
             periodSeconds: 5
-            timeoutSeconds: 2
-            failureThreshold: 6
+            timeoutSeconds: 3
+            failureThreshold: 12
           livenessProbe:
             tcpSocket:
               port: 9080
-            initialDelaySeconds: 15
-            periodSeconds: 10
-            timeoutSeconds: 2
-            failureThreshold: 3
+            initialDelaySeconds: 45
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 6
           resources:
             requests:
               cpu: 30m

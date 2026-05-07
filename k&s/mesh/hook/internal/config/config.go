@@ -28,6 +28,7 @@ type Config struct {
 	InboundPlainPort int
 	OutboundPort     int
 	InboundMTLSPort  int
+	MTLSEnabled      bool
 	ExcludeInbound   string
 	ExcludeOutbound  string
 	SidecarUID       int64
@@ -66,6 +67,7 @@ func LoadFromEnv() (Config, error) {
 		InboundPlainPort: envInt(15006, "INBOUND_PLAIN_PORT"),
 		OutboundPort:     envInt(15002, "OUTBOUND_PORT"),
 		InboundMTLSPort:  envInt(15001, "INBOUND_MTLS_PORT"),
+		MTLSEnabled:      envBool(true, "MTLS_ENABLED"),
 		ExcludeInbound:   envString("9090", "EXCLUDE_INBOUND_PORTS"),
 		ExcludeOutbound:  envString("169.254.169.254/32", "EXCLUDE_OUTBOUND_IPS"),
 		SidecarUID:       envInt64(1337, "SIDECAR_UID"),
@@ -109,8 +111,16 @@ func (c Config) Validate() error {
 		return fmt.Errorf("MESH_VERSION must not be empty")
 	}
 
-	if c.MetricsPort <= 0 || c.InboundPlainPort <= 0 || c.OutboundPort <= 0 || c.InboundMTLSPort <= 0 {
-		return fmt.Errorf("ports must be positive")
+	if c.MetricsPort <= 0 || c.InboundPlainPort <= 0 || c.OutboundPort <= 0 {
+		return fmt.Errorf("metrics, inbound plain and outbound ports must be positive")
+	}
+
+	if c.InboundMTLSPort < 0 {
+		return fmt.Errorf("INBOUND_MTLS_PORT must be non-negative")
+	}
+
+	if c.MTLSEnabled && c.InboundMTLSPort <= 0 {
+		return fmt.Errorf("INBOUND_MTLS_PORT must be positive when MTLS_ENABLED=true")
 	}
 
 	if c.SidecarUID <= 0 {
@@ -121,8 +131,8 @@ func (c Config) Validate() error {
 		return fmt.Errorf("RETRY_ATTEMPTS must be non-negative")
 	}
 
-	if c.ConnectTimeout <= 0 {
-		return fmt.Errorf("TIMEOUT must be positive")
+	if c.ConnectTimeout < 0 {
+		return fmt.Errorf("TIMEOUT must be non-negative")
 	}
 
 	if c.CircuitBreakerFailureThreshold < 0 {

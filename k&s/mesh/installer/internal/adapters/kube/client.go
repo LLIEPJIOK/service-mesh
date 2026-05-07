@@ -23,6 +23,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	intstr "k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -182,10 +183,11 @@ func (c *Client) ApplyWebhookTLSSecret(ctx context.Context, namespace string, ce
 
 func (c *Client) ApplySidecarConfigMap(ctx context.Context, cfg config.MeshConfig, namespace string, dryRun bool) error {
 	sidecarYAML := fmt.Sprintf(
-		"inboundPlainPort: %d\noutboundPort: %d\ninboundMTLSPort: %d\nmetricsPort: %d\nmonitoringEnabled: %t\nloadBalancerAlgorithm: %s\nretryPolicy:\n  attempts: %d\n  backoff:\n    type: %s\n    baseInterval: %s\ntimeout: %s\ncircuitBreakerPolicy:\n  failureThreshold: %d\n  recoveryTime: %s\nexcludeInboundPorts: %s\nexcludeOutboundIPs: %s\n",
+		"inboundPlainPort: %d\noutboundPort: %d\ninboundMTLSPort: %d\nmtlsEnabled: %t\nmetricsPort: %d\nmonitoringEnabled: %t\nloadBalancerAlgorithm: %s\nretryPolicy:\n  attempts: %d\n  backoff:\n    type: %s\n    baseInterval: %s\ntimeout: %s\ncircuitBreakerPolicy:\n  failureThreshold: %d\n  recoveryTime: %s\nexcludeInboundPorts: %s\nexcludeOutboundIPs: %s\n",
 		cfg.Spec.Sidecar.InboundPlainPort,
 		cfg.Spec.Sidecar.OutboundPort,
 		cfg.Spec.Sidecar.InboundMTLSPort,
+		cfg.Spec.Sidecar.MTLSEnabledValue(),
 		cfg.Spec.Sidecar.MetricsPort,
 		cfg.Spec.Sidecar.MonitoringEnabled,
 		cfg.Spec.Sidecar.LoadBalancerAlgorithm,
@@ -265,8 +267,9 @@ func (c *Client) ApplyCertManagerResources(ctx context.Context, cfg config.MeshC
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{Labels: labels(certManagerDeploymentName)},
 				Spec: corev1.PodSpec{
-					ServiceAccountName: certManagerServiceAccountName,
-					SecurityContext:    &corev1.PodSecurityContext{RunAsNonRoot: boolPtr(true), SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}},
+					TerminationGracePeriodSeconds: int64Ptr(30),
+					ServiceAccountName:            certManagerServiceAccountName,
+					SecurityContext:               &corev1.PodSecurityContext{RunAsNonRoot: boolPtr(true), SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}},
 					Containers: []corev1.Container{{
 						Name:            "cert-manager",
 						Image:           resolveImage(cfg.Spec.Images.CertManager, "mesh/cert-manager", cfg.Spec.Version),
@@ -274,8 +277,19 @@ func (c *Client) ApplyCertManagerResources(ctx context.Context, cfg config.MeshC
 						Ports:           []corev1.ContainerPort{{Name: "http", ContainerPort: 8080}},
 						Env:             []corev1.EnvVar{{Name: "HTTP_ADDR", Value: ":8080"}, {Name: "ROOT_CA_CERT_FILE", Value: "/etc/mesh/ca/tls.crt"}, {Name: "ROOT_CA_KEY_FILE", Value: "/etc/mesh/ca/tls.key"}, {Name: "LEAF_TTL", Value: cfg.Spec.Certificates.Validity}},
 						VolumeMounts:    []corev1.VolumeMount{{Name: "mesh-root-ca", MountPath: "/etc/mesh/ca", ReadOnly: true}},
-						ReadinessProbe:  &corev1.Probe{ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/healthz", Port: intstr.FromString("http")}}, InitialDelaySeconds: 2, PeriodSeconds: 5, TimeoutSeconds: 2, FailureThreshold: 5},
-						LivenessProbe:   &corev1.Probe{ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/healthz", Port: intstr.FromString("http")}}, InitialDelaySeconds: 5, PeriodSeconds: 10, TimeoutSeconds: 2, FailureThreshold: 3},
+						StartupProbe:    &corev1.Probe{ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/healthz", Port: intstr.FromString("http")}}, PeriodSeconds: 5, TimeoutSeconds: 3, FailureThreshold: 30},
+						ReadinessProbe:  &corev1.Probe{ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/healthz", Port: intstr.FromString("http")}}, InitialDelaySeconds: 5, PeriodSeconds: 5, TimeoutSeconds: 3, FailureThreshold: 6},
+						LivenessProbe:   &corev1.Probe{ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/healthz", Port: intstr.FromString("http")}}, InitialDelaySeconds: 20, PeriodSeconds: 10, TimeoutSeconds: 3, FailureThreshold: 6},
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("100m"),
+								corev1.ResourceMemory: resource.MustParse("128Mi"),
+							},
+							Limits: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("500m"),
+								corev1.ResourceMemory: resource.MustParse("512Mi"),
+							},
+						},
 						SecurityContext: &corev1.SecurityContext{
 							AllowPrivilegeEscalation: boolPtr(false),
 							ReadOnlyRootFilesystem:   boolPtr(true),
@@ -320,8 +334,9 @@ func (c *Client) ApplyWebhookResources(ctx context.Context, cfg config.MeshConfi
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{Labels: labels(webhookDeploymentName)},
 				Spec: corev1.PodSpec{
-					ServiceAccountName: webhookServiceAccountName,
-					SecurityContext:    &corev1.PodSecurityContext{RunAsNonRoot: boolPtr(true), SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}},
+					TerminationGracePeriodSeconds: int64Ptr(30),
+					ServiceAccountName:            webhookServiceAccountName,
+					SecurityContext:               &corev1.PodSecurityContext{RunAsNonRoot: boolPtr(true), SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}},
 					Containers: []corev1.Container{{
 						Name:            "webhook",
 						Image:           resolveImage("", "mesh/hook", cfg.Spec.Version),
@@ -338,6 +353,7 @@ func (c *Client) ApplyWebhookResources(ctx context.Context, cfg config.MeshConfi
 							{Name: "INBOUND_PLAIN_PORT", Value: fmt.Sprintf("%d", cfg.Spec.Sidecar.InboundPlainPort)},
 							{Name: "OUTBOUND_PORT", Value: fmt.Sprintf("%d", cfg.Spec.Sidecar.OutboundPort)},
 							{Name: "INBOUND_MTLS_PORT", Value: fmt.Sprintf("%d", cfg.Spec.Sidecar.InboundMTLSPort)},
+							{Name: "MTLS_ENABLED", Value: boolToString(cfg.Spec.Sidecar.MTLSEnabledValue())},
 							{Name: "METRICS_PORT", Value: fmt.Sprintf("%d", cfg.Spec.Sidecar.MetricsPort)},
 							{Name: "EXCLUDE_INBOUND_PORTS", Value: cfg.Spec.Sidecar.ExcludeInboundPorts},
 							{Name: "EXCLUDE_OUTBOUND_IPS", Value: cfg.Spec.Sidecar.ExcludeOutboundIPs},
@@ -348,9 +364,20 @@ func (c *Client) ApplyWebhookResources(ctx context.Context, cfg config.MeshConfi
 							{Name: "CIRCUIT_BREAKER_FAILURE_THRESHOLD", Value: fmt.Sprintf("%d", cfg.Spec.Sidecar.CircuitBreakerPolicy.FailureThreshold)},
 							{Name: "CIRCUIT_BREAKER_RECOVERY_TIME", Value: cfg.Spec.Sidecar.CircuitBreakerPolicy.RecoveryTime},
 						},
-						VolumeMounts:    []corev1.VolumeMount{{Name: "webhook-tls", MountPath: "/tls", ReadOnly: true}},
-						ReadinessProbe:  &corev1.Probe{ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Scheme: corev1.URISchemeHTTPS, Path: "/healthz", Port: intstr.FromString("https")}}, InitialDelaySeconds: 2, PeriodSeconds: 5, TimeoutSeconds: 2, FailureThreshold: 5},
-						LivenessProbe:   &corev1.Probe{ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Scheme: corev1.URISchemeHTTPS, Path: "/healthz", Port: intstr.FromString("https")}}, InitialDelaySeconds: 5, PeriodSeconds: 10, TimeoutSeconds: 2, FailureThreshold: 3},
+						VolumeMounts:   []corev1.VolumeMount{{Name: "webhook-tls", MountPath: "/tls", ReadOnly: true}},
+						StartupProbe:   &corev1.Probe{ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Scheme: corev1.URISchemeHTTPS, Path: "/healthz", Port: intstr.FromString("https")}}, PeriodSeconds: 5, TimeoutSeconds: 3, FailureThreshold: 30},
+						ReadinessProbe: &corev1.Probe{ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Scheme: corev1.URISchemeHTTPS, Path: "/healthz", Port: intstr.FromString("https")}}, InitialDelaySeconds: 5, PeriodSeconds: 5, TimeoutSeconds: 3, FailureThreshold: 6},
+						LivenessProbe:  &corev1.Probe{ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Scheme: corev1.URISchemeHTTPS, Path: "/healthz", Port: intstr.FromString("https")}}, InitialDelaySeconds: 20, PeriodSeconds: 10, TimeoutSeconds: 3, FailureThreshold: 6},
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("100m"),
+								corev1.ResourceMemory: resource.MustParse("128Mi"),
+							},
+							Limits: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("500m"),
+								corev1.ResourceMemory: resource.MustParse("512Mi"),
+							},
+						},
 						SecurityContext: &corev1.SecurityContext{AllowPrivilegeEscalation: boolPtr(false), ReadOnlyRootFilesystem: boolPtr(true), RunAsNonRoot: boolPtr(true), RunAsUser: int64Ptr(1337), Capabilities: &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}},
 					}},
 					Volumes: []corev1.Volume{{Name: "webhook-tls", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: webhookTLSSecretName}}}},

@@ -45,9 +45,16 @@ func New(cfg config.Config) (*Service, error) {
 }
 
 func (s *Service) Run(ctx context.Context) error {
-	tlsConfig, err := bootstrapTLSConfig(ctx, s.cfg)
-	if err != nil {
-		return fmt.Errorf("bootstrap tls config: %w", err)
+	var (
+		tlsConfig *tls.Config
+		err       error
+	)
+
+	if s.cfg.InboundMTLSPort > 0 {
+		tlsConfig, err = bootstrapTLSConfig(ctx, s.cfg)
+		if err != nil {
+			return fmt.Errorf("bootstrap tls config: %w", err)
+		}
 	}
 
 	if err := s.discovery.InitialSync(ctx); err != nil {
@@ -61,27 +68,39 @@ func (s *Service) Run(ctx context.Context) error {
 	defer closeListeners(listeners)
 
 	forwarder := proxy.NewForwarder(tlsConfig, s.cfg.DialTimeout)
-	chain := domain.Chain(
+	middlewares := []domain.Handler{
 		newMetricsMiddleware(s.metricsRecorder),
-		newTimeoutMiddleware(s.cfg.Timeout),
-		newRetryMiddleware(
-			s.cfg.RetryPolicy.Attempts,
-			s.cfg.RetryPolicy.BackoffType,
-			s.cfg.RetryPolicy.BaseInterval,
-			s.metricsRecorder,
-		),
+	}
+
+	if s.cfg.Timeout > 0 {
+		middlewares = append(middlewares, newTimeoutMiddleware(s.cfg.Timeout))
+	}
+
+	middlewares = append(middlewares, newRetryMiddleware(
+		s.cfg.RetryPolicy.Attempts,
+		s.cfg.RetryPolicy.BackoffType,
+		s.cfg.RetryPolicy.BaseInterval,
+		s.metricsRecorder,
+	),
 		newRoutingMiddleware(
 			s.cache,
 			s.cfg.AppTargetAddr,
+			s.cfg.InboundPlainPort,
 			s.cfg.InboundMTLSPort,
+			s.cfg.InboundMTLSPort > 0,
 			s.cfg.LoadBalancerConfig.Algorithm,
 		),
-		newBreakerMiddleware(
+	)
+
+	if s.cfg.CircuitBreakerPolicy.FailureThreshold > 0 {
+		middlewares = append(middlewares, newBreakerMiddleware(
 			s.cfg.CircuitBreakerPolicy.FailureThreshold,
 			s.cfg.CircuitBreakerPolicy.RecoveryTime,
 			s.metricsRecorder,
-		),
-	)
+		))
+	}
+
+	chain := domain.Chain(middlewares...)
 
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -159,11 +178,19 @@ func (s *Service) buildListeners(tlsConfig *tls.Config) ([]*proxy.TransparentLis
 		return nil, fmt.Errorf("create outbound listener: %w", err)
 	}
 
-	inboundMTLSNetListener, err := tls.Listen(
-		"tcp",
-		fmt.Sprintf(":%d", s.cfg.InboundMTLSPort),
-		tlsConfig,
-	)
+	listeners := []*proxy.TransparentListener{inboundPlain, outbound}
+
+	if s.cfg.InboundMTLSPort <= 0 {
+		return listeners, nil
+	}
+
+	if tlsConfig == nil {
+		_ = outbound.Close()
+		_ = inboundPlain.Close()
+		return nil, fmt.Errorf("mtls listener requested but tls config is nil")
+	}
+
+	inboundMTLSNetListener, err := tls.Listen("tcp", fmt.Sprintf(":%d", s.cfg.InboundMTLSPort), tlsConfig)
 	if err != nil {
 		_ = outbound.Close()
 		_ = inboundPlain.Close()
@@ -171,8 +198,9 @@ func (s *Service) buildListeners(tlsConfig *tls.Config) ([]*proxy.TransparentLis
 	}
 
 	inboundMTLS := proxy.NewFromListener(proxy.ProfileInboundMTLS, inboundMTLSNetListener)
+	listeners = append(listeners, inboundMTLS)
 
-	return []*proxy.TransparentListener{inboundPlain, outbound, inboundMTLS}, nil
+	return listeners, nil
 }
 
 func (s *Service) runListener(

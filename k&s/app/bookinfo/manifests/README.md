@@ -20,6 +20,13 @@ This directory contains a complete MVP manifest set for running Bookinfo with me
 - Ingress:
   - `productpage` (class `nginx`, path `/` -> service `productpage:9080`)
 
+## Probe Profile
+
+Bookinfo deployments in this directory use tuned probe settings for load-testing stability:
+
+- `startupProbe` on application port `9080` to avoid premature liveness failures during cold start.
+- relaxed `readinessProbe`/`livenessProbe` thresholds to prevent false-positive restarts under short saturation windows.
+
 ## Apply
 
 ```bash

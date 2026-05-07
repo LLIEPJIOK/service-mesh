@@ -91,8 +91,10 @@
 
 - `build-and-load-mesh-images-minikube.sh` — сборка и загрузка mesh-образов в minikube cache;
 - `generate-mesh-config-minikube.sh` — генерация root CA и `manifest/generated/mesh-config.minikube.yaml`;
+- `generate-mesh-config-mode.sh` — генерация mode-specific конфигов (`mtls`, `patterns`, `full`) для нагрузочной матрицы;
 - `install-monitoring-minikube.sh` — установка Prometheus/Grafana и PodMonitor;
 - `deploy-bookinfo-minikube.sh` — деплой Bookinfo, включение ingress addon и ожидание rollout.
+- `run-vegeta-load-matrix.sh` — полный прогон 4 режимов (`baseline`, `mtls`, `patterns`, `full`) с артефактами vegeta и сбором KPI.
 
 ## Acceptance criteria
 

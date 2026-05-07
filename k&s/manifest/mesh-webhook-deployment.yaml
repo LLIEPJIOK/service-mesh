@@ -19,6 +19,7 @@ spec:
         app.kubernetes.io/component: control-plane
         app.kubernetes.io/part-of: service-mesh
     spec:
+      terminationGracePeriodSeconds: 30
       serviceAccountName: mesh-webhook
       securityContext:
         runAsNonRoot: true
@@ -52,6 +53,8 @@ spec:
               value: "15002"
             - name: INBOUND_MTLS_PORT
               value: "15001"
+            - name: MTLS_ENABLED
+              value: "true"
             - name: METRICS_PORT
               value: "9090"
             - name: EXCLUDE_INBOUND_PORTS
@@ -82,31 +85,39 @@ spec:
             - name: webhook-tls
               mountPath: /tls
               readOnly: true
+          startupProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /healthz
+              port: https
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30
           readinessProbe:
             httpGet:
               scheme: HTTPS
               path: /healthz
               port: https
-            initialDelaySeconds: 2
+            initialDelaySeconds: 5
             periodSeconds: 5
-            timeoutSeconds: 2
-            failureThreshold: 5
+            timeoutSeconds: 3
+            failureThreshold: 6
           livenessProbe:
             httpGet:
               scheme: HTTPS
               path: /healthz
               port: https
-            initialDelaySeconds: 5
+            initialDelaySeconds: 20
             periodSeconds: 10
-            timeoutSeconds: 2
-            failureThreshold: 3
+            timeoutSeconds: 3
+            failureThreshold: 6
           resources:
             requests:
-              cpu: 50m
-              memory: 64Mi
+              cpu: 100m
+              memory: 128Mi
             limits:
-              cpu: 250m
-              memory: 256Mi
+              cpu: 500m
+              memory: 512Mi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

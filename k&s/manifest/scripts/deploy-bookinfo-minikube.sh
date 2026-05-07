@@ -22,12 +22,12 @@ kubectl create secret tls mesh-root-ca \
 	--key="${tmp_dir}/ca.key" \
 	--dry-run=client -o yaml | kubectl apply -f -
 
-kubectl rollout status deployment/productpage-v1 -n bookinfo --timeout=10s
-kubectl rollout status deployment/details-v1 -n bookinfo --timeout=10s
-kubectl rollout status deployment/ratings-v1 -n bookinfo --timeout=10s
-kubectl rollout status deployment/reviews-v1 -n bookinfo --timeout=10s
-kubectl rollout status deployment/reviews-v2 -n bookinfo --timeout=10s
-kubectl rollout status deployment/reviews-v3 -n bookinfo --timeout=10s
+kubectl rollout status deployment/productpage-v1 -n bookinfo --timeout=180s
+kubectl rollout status deployment/details-v1 -n bookinfo --timeout=180s
+kubectl rollout status deployment/ratings-v1 -n bookinfo --timeout=180s
+kubectl rollout status deployment/reviews-v1 -n bookinfo --timeout=180s
+kubectl rollout status deployment/reviews-v2 -n bookinfo --timeout=180s
+kubectl rollout status deployment/reviews-v3 -n bookinfo --timeout=180s
 
 MINIKUBE_IP="$(minikube ip)"
 echo "[bookinfo] Ingress URL (with minikube tunnel): http://127.0.0.1/productpage"

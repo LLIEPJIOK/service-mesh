@@ -133,10 +133,11 @@ spec:
     inboundPlainPort: 15006
     outboundPort: 15002
     inboundMTLSPort: 15001
+    mtlsEnabled: true
     metricsPort: 9090
 
     monitoringEnabled: true
-    loadBalancerAlgorithm: roundRobin # roundRobin | random
+    loadBalancerAlgorithm: roundRobin # none | roundRobin | random
 
     retryPolicy:
       attempts: 3
@@ -172,7 +173,29 @@ spec:
 - `spec.namespace`
 - `spec.sidecar.inboundPlainPort`
 - `spec.sidecar.outboundPort`
-- `spec.sidecar.inboundMTLSPort`
+
+`spec.sidecar.inboundMTLSPort` и `spec.sidecar.mtlsEnabled` имеют дефолты (`15001` и `true`) и могут быть переопределены в mode-specific конфигурации.
+
+Для режима без mTLS:
+
+```yaml
+sidecar:
+  inboundMTLSPort: 0
+  mtlsEnabled: false
+```
+
+Для режима с отключенными reliability-паттернами (только mTLS):
+
+```yaml
+sidecar:
+  loadBalancerAlgorithm: none
+  retryPolicy:
+    attempts: 1
+  timeout: 0s
+  circuitBreakerPolicy:
+    failureThreshold: 0
+    recoveryTime: 0s
+```
 
 > [!IMPORTANT]
 > В текущем MVP root CA (сертификат и ключ) является обязательной частью `MeshConfig`. Если `spec.certificates.rootCA.cert` или `spec.certificates.rootCA.key` отсутствуют, команда `mesh install` завершается ошибкой валидации.

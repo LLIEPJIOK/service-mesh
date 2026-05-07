@@ -56,6 +56,21 @@
 - Chaos и fault-injection сценарии.
 - Полная матрица регрессионного тестирования.
 
+## Нагрузочная матрица (vegeta)
+
+Для воспроизводимого нагрузочного прогона 4 конфигураций (`baseline`, `mtls`, `patterns`, `full`) используйте:
+
+```bash
+k\&s/manifest/scripts/run-vegeta-load-matrix.sh
+```
+
+Артефакты прогона сохраняются в `k&s/test/artifacts/load/<run-id>/`:
+
+- per-mode `results.bin`, `report.txt`, `report.json`, `hist.txt`;
+- per-mode `latency-plot.html` (встроенный vegeta plot);
+- per-mode kube evidence (`events.txt`, `events-unhealthy.txt`, `pods.txt`, `bookinfo-pods.describe.txt`, workload logs);
+- итоговый `summary.md` с KPI (throughput/success/p95/restarts).
+
 ## Практический smoke-runbook (minikube)
 
 1. Установить mesh-контур:

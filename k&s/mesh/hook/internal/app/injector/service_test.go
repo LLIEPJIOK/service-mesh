@@ -223,6 +223,7 @@ func newTestService() *Service {
 		InboundPlainPort:               15006,
 		OutboundPort:                   15002,
 		InboundMTLSPort:                15001,
+		MTLSEnabled:                    true,
 		ExcludeInbound:                 "9090",
 		ExcludeOutbound:                "169.254.169.254/32",
 		SidecarUID:                     1337,

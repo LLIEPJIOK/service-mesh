@@ -7,7 +7,7 @@ RELEASE_NAME="${RELEASE_NAME:-mesh-monitoring}"
 
 kubectl apply -f "${ROOT_DIR}/manifest/monitoring/00-monitoring-namespace.yaml"
 
-helm upgrade --install "${RELEASE_NAME}" oci://ghcr.io/prometheus-community/charts/kube-prometheus-stack \
+helm upgrade --install "${RELEASE_NAME}" "${ROOT_DIR}/charts/kube-prometheus-stack" \
   --namespace monitoring \
   --values "${VALUES_FILE}" \
   --wait \

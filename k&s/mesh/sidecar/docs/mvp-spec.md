@@ -7,7 +7,7 @@
 MVP sidecar обеспечивает:
 
 - Прозрачный перехват TCP-трафика приложения.
-- mTLS между sidecar внутри mesh.
+- mTLS между sidecar внутри mesh (если mTLS включен в конфиге).
 - Service discovery через EndpointSlice и Service.
 - Балансировку исходящих соединений.
 - Базовую отказоустойчивость на этапе установления соединения.
@@ -23,15 +23,15 @@ MVP sidecar обеспечивает:
 
 ### Перехват и порты
 
-1. Sidecar MUST использовать три listener-порта: `inboundPlainPort`, `outboundPort`, `inboundMTLSPort`.
+1. Sidecar MUST использовать `inboundPlainPort` и `outboundPort`.
 2. Inbound plain-трафик MUST быть перенаправлен на `inboundPlainPort` через `PREROUTING`.
 3. Outbound-трафик приложения MUST быть перенаправлен на `outboundPort` через `OUTPUT`.
-4. Порт `inboundMTLSPort` MUST слушаться напрямую, без REDIRECT на тот же порт.
+4. Если `mtlsEnabled=true`, sidecar MUST слушать `inboundMTLSPort` напрямую, без REDIRECT на тот же порт.
 
 ### mTLS
 
-1. Входящий трафик на `inboundMTLSPort` MUST проходить mutual TLS с проверкой клиентского сертификата.
-2. Для mesh endpoint'ов исходящий dial SHOULD использовать mTLS.
+1. Если `mtlsEnabled=true`, входящий трафик на `inboundMTLSPort` MUST проходить mutual TLS с проверкой клиентского сертификата.
+2. Если `mtlsEnabled=true`, для mesh endpoint'ов исходящий dial SHOULD использовать mTLS.
 3. Для external endpoint'ов исходящий dial MAY выполняться без mTLS.
 4. Sidecar MUST валидировать peer-сертификаты через доверенный CA.
 5. Для mesh endpoint'ов sidecar MUST передавать TLS `ServerName` из `Endpoint.ServiceName` (service FQDN), а не из IP-адреса.
@@ -70,7 +70,7 @@ MVP sidecar обеспечивает:
 
 ### Жизненный цикл
 
-1. Sidecar MUST получить рабочий сертификат до запуска listener'ов.
+1. Если `mtlsEnabled=true`, sidecar MUST получить рабочий сертификат до запуска listener'ов.
 2. При остановке sidecar MUST прекратить прием новых соединений и дождаться активных обработчиков в пределах timeout.
 
 ## Non-goals (MVP)
@@ -82,18 +82,18 @@ MVP sidecar обеспечивает:
 
 ## Acceptance criteria
 
-| Функция              | Критерий приемки                                                                            |
-| -------------------- | ------------------------------------------------------------------------------------------- |
-| Перехват inbound     | Запрос к приложению снаружи pod достигает sidecar через `inboundPlainPort`                  |
-| Перехват outbound    | Исходящее соединение приложения проходит через `outboundPort`                               |
-| Incoming mTLS        | Соединение на `inboundMTLSPort` без валидного client cert отклоняется                       |
-| Discovery LIST/WATCH | Добавление/удаление `Service` и pod endpoint отражается в кэше без рестарта sidecar         |
-| Балансировка         | Для серии новых соединений по одному service наблюдается распределение по алгоритму         |
-| Retry                | При искусственной dial-ошибке выполняются повторные попытки согласно `retryPolicy.attempts` |
-| Timeout              | Соединение, не установленное за `timeout`, завершается с timeout ошибкой                    |
-| Circuit breaker      | После `failureThreshold` ошибок endpoint блокируется до `recoveryTime`                      |
-| Метрики              | Endpoint `/metrics` доступен и содержит минимум обязательные метрики                        |
-| Graceful shutdown    | При SIGTERM новые соединения не принимаются, активные завершаются или обрываются по timeout |
+| Функция              | Критерий приемки                                                                             |
+| -------------------- | -------------------------------------------------------------------------------------------- |
+| Перехват inbound     | Запрос к приложению снаружи pod достигает sidecar через `inboundPlainPort`                   |
+| Перехват outbound    | Исходящее соединение приложения проходит через `outboundPort`                                |
+| Incoming mTLS        | При `mtlsEnabled=true` соединение на `inboundMTLSPort` без валидного client cert отклоняется |
+| Discovery LIST/WATCH | Добавление/удаление `Service` и pod endpoint отражается в кэше без рестарта sidecar          |
+| Балансировка         | Для серии новых соединений по одному service наблюдается распределение по алгоритму          |
+| Retry                | При искусственной dial-ошибке выполняются повторные попытки согласно `retryPolicy.attempts`  |
+| Timeout              | Соединение, не установленное за `timeout`, завершается с timeout ошибкой                     |
+| Circuit breaker      | После `failureThreshold` ошибок endpoint блокируется до `recoveryTime`                       |
+| Метрики              | Endpoint `/metrics` доступен и содержит минимум обязательные метрики                         |
+| Graceful shutdown    | При SIGTERM новые соединения не принимаются, активные завершаются или обрываются по timeout  |
 
 ## Канонический конфиг
 
@@ -102,10 +102,11 @@ sidecar:
   inboundPlainPort: 15006
   outboundPort: 15002
   inboundMTLSPort: 15001
+  mtlsEnabled: true
   metricsPort: 9090
 
   monitoringEnabled: true
-  loadBalancerAlgorithm: roundRobin # roundRobin | random
+  loadBalancerAlgorithm: roundRobin # none | roundRobin | random
 
   retryPolicy:
     attempts: 3

@@ -33,6 +33,8 @@ retryPolicy:
     baseInterval: 100ms
 ```
 
+Если `retryPolicy.attempts <= 1`, retry middleware не применяется.
+
 ### Реализация
 
 Повторения реализованы в виде middleware (см. раздел ["Контракт middleware"](implementation.md#контракт-middleware)), который вызывает следующий обработчик несколько раз при dial-ошибках.
@@ -76,6 +78,8 @@ func (m *DialRetryMiddleware) Handle(ctx *proxy.ConnContext, next func(*proxy.Co
 timeout: 5s # Максимальное время ожидания ответа от сервиса
 ```
 
+Если `timeout: 0s`, timeout middleware отключается.
+
 ## Реализация
 
 Таймауты реализованы с помощью middleware (см. раздел ["Контракт middleware"](implementation.md#контракт-middleware)), которое использует контекст с дедлайном. Например:
@@ -118,6 +122,8 @@ circuitBreakerPolicy:
   failureThreshold: 5 # Количество неудачных запросов для перехода в "открытое" состояние
   recoveryTime: 30s # Время, через которое предохранитель перейдёт в "закрытое" состояние после перехода в "открытое" состояние
 ```
+
+Если `circuitBreakerPolicy.failureThreshold: 0`, circuit breaker middleware отключается.
 
 ### Реализация
 

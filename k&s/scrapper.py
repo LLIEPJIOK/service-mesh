@@ -10,7 +10,7 @@ import argparse
 from pathlib import Path
 
 # Расширения текстовых файлов (можно дополнить)
-TEXT_EXTENSIONS = {'.md', '.yaml', '.yml'}
+TEXT_EXTENSIONS = {'.md'}
 
 def collect_files_content(root_dir, output_file, skip_binary=True, exclude_dirs=None):
     """

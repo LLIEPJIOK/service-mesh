@@ -12,6 +12,7 @@ Sidecar - это L7 прокси-компонент, который работа
 - Балансировка исходящих соединений (`roundRobin`, `random`) (см. [Балансировка нагрузки](docs/balancing.md)).
 - Retry/timeout/circuit breaker на этапе установления исходящего соединения (см. [Отказоустойчивость](docs/reliability.md)).
 - Экспорт метрик sidecar на `/metrics` (см. [Наблюдаемость](docs/observability.md)).
+- Режим без mTLS для тестовых сценариев: `mtlsEnabled: false` и `inboundMTLSPort: 0`.
 
 ## Ограничения MVP
 
@@ -45,10 +46,11 @@ sidecar:
   inboundPlainPort: 15006
   outboundPort: 15002
   inboundMTLSPort: 15001
+  mtlsEnabled: true
   metricsPort: 9090
 
   monitoringEnabled: true
-  loadBalancerAlgorithm: roundRobin # roundRobin | random
+  loadBalancerAlgorithm: roundRobin # none | roundRobin | random
 
   retryPolicy:
     attempts: 3
@@ -64,6 +66,27 @@ sidecar:
 
   excludeInboundPorts: "9090" # metricsPort должен быть исключен
   excludeOutboundIPs: "169.254.169.254"
+```
+
+Отключение mTLS для режима plain mesh:
+
+```yaml
+sidecar:
+  inboundMTLSPort: 0
+  mtlsEnabled: false
+```
+
+Отключение reliability-паттернов для mode `mtls`:
+
+```yaml
+sidecar:
+  loadBalancerAlgorithm: none
+  retryPolicy:
+    attempts: 1
+  timeout: 0s
+  circuitBreakerPolicy:
+    failureThreshold: 0
+    recoveryTime: 0s
 ```
 
 ## Реализация

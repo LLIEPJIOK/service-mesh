@@ -93,15 +93,15 @@ Init‑контейнер выполняет скрипт, который:
 
 Добавляется в `spec.containers` после всех существующих контейнеров.
 
-| Поле              | Значение                                                                                                                   |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `name`            | `sidecar`                                                                                                                  |
-| `image`           | `mesh/sidecar:latest`                                                                                                      |
-| `imagePullPolicy` | `IfNotPresent`                                                                                                             |
-| `securityContext` | `runAsNonRoot: true`, `runAsUser: 1337`                                                                                    |
-| `ports`           | `- containerPort: 15001` (inbound mTLS)<br>`- containerPort: 15002` (outbound)<br>`- containerPort: 15006` (inbound plain) |
-| `env`             | Переменные окружения для конфигурации sidecar (см. [Переменные окружения](#переменные-окружения))                          |
-| `volumeMounts`    | `- name: mesh-ca` mountPath: `/etc/mesh/ca` readOnly: true                                                                 |
+| Поле              | Значение                                                                                                                                             |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`            | `sidecar`                                                                                                                                            |
+| `image`           | `mesh/sidecar:latest`                                                                                                                                |
+| `imagePullPolicy` | `IfNotPresent`                                                                                                                                       |
+| `securityContext` | `runAsNonRoot: true`, `runAsUser: 1337`                                                                                                              |
+| `ports`           | `- containerPort: 15002` (outbound)<br>`- containerPort: 15006` (inbound plain)<br>`- containerPort: 15001` (inbound mTLS, только если mTLS включен) |
+| `env`             | Переменные окружения для конфигурации sidecar (см. [Переменные окружения](#переменные-окружения))                                                    |
+| `volumeMounts`    | `- name: mesh-ca` mountPath: `/etc/mesh/ca` readOnly: true                                                                                           |
 
 > [!NOTE]
 > В MVP порт `15000` используется только для health‑проб; метрики экспортируются на отдельном порту `metricsPort` (обычно `9090`), который **не** перехватывается iptables.
@@ -150,7 +150,9 @@ Init‑контейнер выполняет скрипт, который:
 | `INBOUND_PLAIN_PORT`      | Порт для входящего plain‑трафика                           | `15006`                         |
 | `OUTBOUND_PORT`           | Порт для исходящего трафика                                | `15002`                         |
 | `INBOUND_MTLS_PORT`       | Порт для входящего mTLS‑трафика                            | `15001`                         |
+| `MTLS_ENABLED`            | Включение mTLS listener и mTLS-dial для mesh endpoint'ов   | `true`                          |
 | `METRICS_PORT`            | Порт для экспорта метрик Prometheus                        | `9090`                          |
+| `BOOTSTRAP_CERTIFICATES`  | Включение bootstrap сертификатов при старте sidecar        | `true` при `MTLS_ENABLED=true`  |
 | `CERT_FILE`               | Путь к файлу сертификата sidecar                           | `/etc/mesh/certs/tls.crt`       |
 | `KEY_FILE`                | Путь к файлу приватного ключа                              | `/etc/mesh/certs/tls.key`       |
 | `CA_FILE`                 | Путь к файлу корневого CA                                  | `/etc/mesh/ca/ca.crt`           |
@@ -250,6 +252,10 @@ spec:
           value: "15002"
         - name: INBOUND_MTLS_PORT
           value: "15001"
+        - name: MTLS_ENABLED
+          value: "true"
+        - name: BOOTSTRAP_CERTIFICATES
+          value: "true"
         - name: METRICS_PORT
           value: "9090"
         - name: CERT_FILE

@@ -17,6 +17,7 @@ type Config struct {
 	InboundPlainPort   int
 	OutboundPort       int
 	InboundMTLSPort    int
+	MTLSEnabled        bool
 	MetricsPort        int
 	MonitoringEnabled  bool
 	AppTargetAddr      string
@@ -59,7 +60,11 @@ type CircuitBreakerPolicy struct {
 
 func LoadFromEnv() (Config, error) {
 	timeout := envDurationWithAliases(5*time.Second, "TIMEOUT", "SIDECAR_TIMEOUT")
-	dialTimeout := envDurationWithAliases(timeout, "DIAL_TIMEOUT", "SIDECAR_DIAL_TIMEOUT")
+	dialTimeoutDefault := timeout
+	if dialTimeoutDefault <= 0 {
+		dialTimeoutDefault = 5 * time.Second
+	}
+	dialTimeout := envDurationWithAliases(dialTimeoutDefault, "DIAL_TIMEOUT", "SIDECAR_DIAL_TIMEOUT")
 
 	cfg := Config{
 		PodName:        envStringWithAliases("unknown-pod", "POD_NAME"),
@@ -69,6 +74,7 @@ func LoadFromEnv() (Config, error) {
 		InboundPlainPort:  envIntWithAliases(15006, "INBOUND_PLAIN_PORT", "SIDECAR_INBOUND_PLAIN_PORT"),
 		OutboundPort:      envIntWithAliases(15002, "OUTBOUND_PORT", "SIDECAR_OUTBOUND_PORT"),
 		InboundMTLSPort:   envIntWithAliases(15001, "INBOUND_MTLS_PORT", "SIDECAR_INBOUND_MTLS_PORT"),
+		MTLSEnabled:       envBoolWithAliases(true, "MTLS_ENABLED", "SIDECAR_MTLS_ENABLED"),
 		MetricsPort:       envIntWithAliases(9090, "METRICS_PORT", "SIDECAR_METRICS_PORT"),
 		MonitoringEnabled: envBoolWithAliases(true, "MONITORING_ENABLED", "SIDECAR_MONITORING_ENABLED"),
 		AppTargetAddr:     envStringWithAliases("127.0.0.1:8080", "APP_TARGET_ADDR", "SIDECAR_APP_TARGET_ADDR"),
@@ -106,35 +112,54 @@ func LoadFromEnv() (Config, error) {
 		return Config{}, err
 	}
 
+	if !cfg.MTLSEnabled {
+		cfg.InboundMTLSPort = 0
+	}
+
 	return cfg, nil
 }
 
 func (c Config) Validate() error {
-	if c.InboundPlainPort <= 0 || c.OutboundPort <= 0 || c.InboundMTLSPort <= 0 || c.MetricsPort <= 0 {
-		return fmt.Errorf("all ports must be positive")
+	if c.InboundPlainPort <= 0 || c.OutboundPort <= 0 || c.MetricsPort <= 0 {
+		return fmt.Errorf("inbound plain, outbound and metrics ports must be positive")
+	}
+
+	if c.InboundMTLSPort < 0 {
+		return fmt.Errorf("inbound mtls port must be non-negative")
+	}
+
+	if c.MTLSEnabled && c.InboundMTLSPort <= 0 {
+		return fmt.Errorf("inbound mtls port must be positive when mTLS is enabled")
 	}
 
 	ports := map[int]string{
 		c.InboundPlainPort: "inbound plain",
 		c.OutboundPort:     "outbound",
-		c.InboundMTLSPort:  "inbound mtls",
 		c.MetricsPort:      "metrics",
 	}
 
-	if len(ports) != 4 {
+	if c.InboundMTLSPort > 0 {
+		ports[c.InboundMTLSPort] = "inbound mtls"
+	}
+
+	if len(ports) != 3 && len(ports) != 4 {
 		return fmt.Errorf("sidecar ports must be unique")
 	}
 
-	if c.Timeout <= 0 || c.DialTimeout <= 0 {
-		return fmt.Errorf("timeout values must be positive")
+	if c.Timeout < 0 {
+		return fmt.Errorf("timeout must be non-negative")
+	}
+
+	if c.DialTimeout <= 0 {
+		return fmt.Errorf("dial timeout must be positive")
 	}
 
 	if c.ShutdownTimeout <= 0 {
 		return fmt.Errorf("shutdown timeout must be positive")
 	}
 
-	if c.RetryPolicy.Attempts < 1 {
-		return fmt.Errorf("retry attempts must be at least 1")
+	if c.RetryPolicy.Attempts < 0 {
+		return fmt.Errorf("retry attempts must be non-negative")
 	}
 
 	if c.RetryPolicy.BaseInterval <= 0 {
@@ -148,17 +173,13 @@ func (c Config) Validate() error {
 	}
 
 	switch c.LoadBalancerConfig.Algorithm {
-	case "roundRobin", "random":
+	case "none", "roundRobin", "random":
 	default:
 		return fmt.Errorf("unsupported load balancer algorithm %q", c.LoadBalancerConfig.Algorithm)
 	}
 
-	if c.CircuitBreakerPolicy.FailureThreshold == 0 {
-		return fmt.Errorf("circuit breaker failure threshold must be at least 1")
-	}
-
-	if c.CircuitBreakerPolicy.RecoveryTime <= 0 {
-		return fmt.Errorf("circuit breaker recovery time must be positive")
+	if c.CircuitBreakerPolicy.FailureThreshold > 0 && c.CircuitBreakerPolicy.RecoveryTime <= 0 {
+		return fmt.Errorf("circuit breaker recovery time must be positive when circuit breaker is enabled")
 	}
 
 	if _, _, err := net.SplitHostPort(c.AppTargetAddr); err != nil {
@@ -169,7 +190,9 @@ func (c Config) Validate() error {
 		return fmt.Errorf("metrics port %d must be in EXCLUDE_INBOUND_PORTS", c.MetricsPort)
 	}
 
-	if c.BootstrapCertificates {
+	mtlsEnabled := c.MTLSEnabled && c.InboundMTLSPort > 0
+
+	if mtlsEnabled && c.BootstrapCertificates {
 		if c.CertManagerSignURL == "" {
 			return fmt.Errorf("cert manager sign URL is required when bootstrap is enabled")
 		}
@@ -177,7 +200,9 @@ func (c Config) Validate() error {
 		if c.ServiceAccountTokenPath == "" {
 			return fmt.Errorf("service account token path is required when bootstrap is enabled")
 		}
-	} else {
+	}
+
+	if mtlsEnabled && !c.BootstrapCertificates {
 		if c.CertFile == "" || c.KeyFile == "" || c.CAFile == "" {
 			return fmt.Errorf("cert, key and ca files are required when bootstrap is disabled")
 		}
