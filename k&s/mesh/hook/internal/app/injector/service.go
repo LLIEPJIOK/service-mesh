@@ -10,6 +10,7 @@ import (
 
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/LLIEPJIOK/service-mesh/hook/internal/config"
 )
@@ -400,6 +401,16 @@ func (s *Service) buildSidecarContainer(serviceAccountName string, uid int64, ap
 		SecurityContext: &corev1.SecurityContext{
 			RunAsNonRoot: &runAsNonRoot,
 			RunAsUser:    &uid,
+		},
+		Resources: corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("1000m"),
+				corev1.ResourceMemory: resource.MustParse("1Gi"),
+			},
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("100m"),
+				corev1.ResourceMemory: resource.MustParse("256Mi"),
+			},
 		},
 		Ports: ports,
 		Env: []corev1.EnvVar{
