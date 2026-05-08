@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-OUT_DIR="${ROOT_DIR}/manifest/generated"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+OUT_DIR="${ROOT_DIR}/k&s/manifest/generated"
 CA_CERT_FILE="${OUT_DIR}/root-ca.crt"
 CA_KEY_FILE="${OUT_DIR}/root-ca.key"
 VERSION="${VERSION:-v0.1.0}"

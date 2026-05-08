@@ -85,10 +85,23 @@
 - `03-grafana-dashboard-sidecar-apps.yaml`;
 - `kube-prometheus-stack-values.yaml` для установки `kube-prometheus-stack`.
 
+## Скрипты запуска для kind
+
+В каталоге `manifest/scripts/kind/` добавлены утилиты для kind (1 нода):
+
+- `create-cluster.sh` — создание kind-кластера с пробросом портов 80/443 на хост;
+- `install-ingress-nginx.sh` — установка NGINX Ingress для доступа к сервисам;
+- `preload-images.sh` — одноразовая загрузка внешних образов (Bookinfo, monitoring) в локальный Docker;
+- `load-images.sh` — копирование локальных образов из Docker в kind (без pull из интернета);
+- `deploy-bookinfo.sh` — деплой Bookinfo с ingress URL;
+- `install-monitoring.sh` — установка Prometheus + Grafana с lightweight values для kind;
+- `generate-mesh-config.sh` — генерация root CA и `mesh-config.kind.yaml`.
+
 ## Скрипты запуска для minikube
 
 В каталоге `manifest/scripts/` добавлены утилиты MVP:
 
+- `build-and-load-mesh-images.sh` — универсальная сборка и загрузка mesh-образов (поддерживает kind и minikube);
 - `build-and-load-mesh-images-minikube.sh` — сборка и загрузка mesh-образов в minikube cache;
 - `generate-mesh-config-minikube.sh` — генерация root CA и `manifest/generated/mesh-config.minikube.yaml`;
 - `generate-mesh-config-mode.sh` — генерация mode-specific конфигов (`mtls`, `patterns`, `full`) для нагрузочной матрицы;

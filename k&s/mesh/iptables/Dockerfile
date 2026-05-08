@@ -1,4 +1,5 @@
-FROM alpine:3.18
+ARG GOARCH=amd64
+FROM --platform=linux/${GOARCH} alpine:3.18
 
 RUN apk add --no-cache iptables
 

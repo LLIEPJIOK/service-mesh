@@ -1,4 +1,5 @@
 DOCKER ?= docker
+GOARCH ?= amd64
 
 DOCKERHUB_NAMESPACE ?= lliepjiok
 IMAGE_NAME ?= iptables-init
@@ -18,9 +19,10 @@ help:
 	@echo "  DOCKERHUB_NAMESPACE=$(DOCKERHUB_NAMESPACE)"
 	@echo "  IMAGE_NAME=$(IMAGE_NAME)"
 	@echo "  VERSION=$(VERSION)"
+	@echo "  GOARCH=$(GOARCH) (currently not used, alpine supports both amd64/arm64)"
 
 docker-build:
-	$(DOCKER) build -t $(IMAGE):$(VERSION) -t $(IMAGE):latest .
+	$(DOCKER) build --build-arg GOARCH=$(GOARCH) -t $(IMAGE):$(VERSION) -t $(IMAGE):latest .
 
 docker-push-version:
 	$(DOCKER) push $(IMAGE):$(VERSION)

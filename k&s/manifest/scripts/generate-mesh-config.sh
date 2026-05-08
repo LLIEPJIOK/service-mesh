@@ -1,20 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-OUT_DIR="${ROOT_DIR}/manifest/generated"
-CONFIG_FILE="${OUT_DIR}/mesh-config.minikube.yaml"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+OUT_DIR="${ROOT_DIR}/k&s/manifest/generated"
+CONFIG_FILE="${OUT_DIR}/mesh-config.kind.yaml"
 CA_CERT_FILE="${OUT_DIR}/root-ca.crt"
 CA_KEY_FILE="${OUT_DIR}/root-ca.key"
 VERSION="${VERSION:-v0.1.0}"
 
 mkdir -p "${OUT_DIR}"
 
-openssl req -x509 -newkey rsa:4096 -sha256 -nodes \
-  -keyout "${CA_KEY_FILE}" \
-  -out "${CA_CERT_FILE}" \
-  -days 365 \
-  -subj "/CN=mesh-root-ca/O=service-mesh-mvp"
+if [[ ! -f "${CA_CERT_FILE}" ]] || [[ ! -f "${CA_KEY_FILE}" ]]; then
+  echo "[mesh] Generating new root CA..."
+  openssl req -x509 -newkey rsa:4096 -sha256 -nodes \
+    -keyout "${CA_KEY_FILE}" \
+    -out "${CA_CERT_FILE}" \
+    -days 365 \
+    -subj "/CN=mesh-root-ca/O=service-mesh-mvp"
+else
+  echo "[mesh] Using existing root CA (delete files to regenerate)"
+fi
 
 indent_pem() {
   sed 's/^/        /'
@@ -24,7 +29,7 @@ cat > "${CONFIG_FILE}" <<EOF
 apiVersion: mesh.io/v1alpha1
 kind: MeshConfig
 metadata:
-  name: minikube
+  name: kind
 spec:
   namespace: mesh-system
   version: "${VERSION}"

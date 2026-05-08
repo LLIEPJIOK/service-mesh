@@ -71,6 +71,46 @@ k\&s/manifest/scripts/run-vegeta-load-matrix.sh
 - per-mode kube evidence (`events.txt`, `events-unhealthy.txt`, `pods.txt`, `bookinfo-pods.describe.txt`, workload logs);
 - итоговый `summary.md` с KPI (throughput/success/p95/restarts).
 
+## Практический smoke-runbook (kind)
+
+```bash
+# Быстрый старт одной командой
+make kind-env
+```
+
+Или пошагово:
+
+```bash
+make kind-create                    # Создать кластер
+make install-ingress                # NGINX Ingress
+make kind-images-preload            # Скачать внешние образы (один раз)
+make kind-images-load              # Загрузить в кластер
+make mesh-build-and-load           # Собрать mesh-образы
+make kind-mesh-install             # Установить mesh
+make kind-bookinfo                  # Развернуть Bookinfo
+make kind-monitoring               # Prometheus + Grafana
+```
+
+Проверки:
+
+```bash
+# SMK-1: Bookinfo
+open "http://127.0.0.1/productpage"
+curl -i "http://127.0.0.1/productpage" | head -n 1
+
+# SMK-2: Распределение по reviews
+for i in $(seq 1 20); do
+    curl -s "http://127.0.0.1/productpage" | grep -E "(glyphicon-star|color=black|Reviews served by)" | head -n 1
+done
+
+# SMK-3: Prometheus
+kubectl port-forward -n monitoring svc/mesh-monitoring-prometheus 9090:9090 &
+curl -s "http://localhost:9090/api/v1/query?query=mesh_requests_total" | jq '.status'
+
+# SMK-4: Grafana
+open "http://grafana.127.0.0.1.nip.io"
+```
+
 ## Практический smoke-runbook (minikube)
 
 1. Установить mesh-контур:

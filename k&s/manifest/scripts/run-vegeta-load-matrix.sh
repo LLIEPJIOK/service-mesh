@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-SCRIPTS_DIR="${ROOT_DIR}/manifest/scripts"
-ARTIFACTS_DIR="${ROOT_DIR}/test/artifacts/load"
-INSTALLER_DIR="${ROOT_DIR}/mesh/installer"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+SCRIPTS_DIR="${ROOT_DIR}/k&s/manifest/scripts"
+ARTIFACTS_DIR="${ROOT_DIR}/k&s/test/artifacts/load"
+INSTALLER_DIR="${ROOT_DIR}/k&s/mesh/installer"
 BOOKINFO_NAMESPACE="bookinfo"
 MESH_NAMESPACE="mesh-system"
 MONITORING_NAMESPACE="monitoring"

@@ -45,7 +45,7 @@ clean:
 	rm -rf bin
 
 docker-build:
-	$(DOCKER) build -t $(IMAGE):$(VERSION) -t $(IMAGE):latest .
+	$(DOCKER) build --build-arg GOARCH=$(GOARCH) -t $(IMAGE):$(VERSION) -t $(IMAGE):latest .
 
 docker-push-version:
 	$(DOCKER) push $(IMAGE):$(VERSION)
