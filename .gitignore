@@ -34,10 +34,10 @@ go.work.sum
 
 # Generated files
 generated/
-k&s/charts/
+k8s/charts/
 
 # MacOS files
 .DS_Store
 
 # Test artifacts
-k&s/test/artifacts/
+k8s/test/artifacts/

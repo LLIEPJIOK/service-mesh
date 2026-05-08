@@ -6,8 +6,8 @@
 
 SHELL := /bin/bash
 ROOT_DIR := $(shell pwd)
-MANIFEST_SCRIPTS_DIR := $(ROOT_DIR)/k&s/manifest/scripts
-MESH_DIR := $(ROOT_DIR)/k&s/mesh
+MANIFEST_SCRIPTS_DIR := $(ROOT_DIR)/k8s/manifest/scripts
+MESH_DIR := $(ROOT_DIR)/k8s/mesh
 VERSION ?= v0.1.0
 DOCKERHUB_NAMESPACE ?= mesh
 KIND_CLUSTER_NAME ?= mesh-demo
@@ -132,7 +132,7 @@ kind-create:
 
 kind-clean: kind-down
 	@echo "[make] Cleaning up generated files..."
-	@rm -rf "$(ROOT_DIR)/k&s/manifest/generated" 2>/dev/null || true
+	@rm -rf "$(ROOT_DIR)/k8s/manifest/generated" 2>/dev/null || true
 	@rm -rf "$(MESH_DIR)/installer/bin" 2>/dev/null || true
 
 kind-status:
@@ -184,7 +184,7 @@ vegeta-bench-sidecar:
 vegeta-bench: vegeta-bench-nosidecar vegeta-bench-sidecar vegeta-plot
 	@echo ""
 	@echo "=========================================="
-	@echo "Benchmark complete! Results in k&s/test/artifacts/"
+	@echo "Benchmark complete! Results in k8s/test/artifacts/"
 	@echo "=========================================="
 
 vegeta-plot:
@@ -193,12 +193,12 @@ vegeta-plot:
 
 vegeta-ramp-nosidecar:
 	@echo "[make] Running ramp test WITHOUT sidecar..."
-	@mkdir -p "$(ROOT_DIR)/k&s/test/artifacts/ramp/nosidecar"
+	@mkdir -p "$(ROOT_DIR)/k8s/test/artifacts/ramp/nosidecar"
 	@bash "$(MANIFEST_SCRIPTS_DIR)/run-vegeta-ramp.sh" nosidecar
 
 vegeta-ramp-sidecar:
 	@echo "[make] Running ramp test WITH sidecar..."
-	@mkdir -p "$(ROOT_DIR)/k&s/test/artifacts/ramp/sidecar"
+	@mkdir -p "$(ROOT_DIR)/k8s/test/artifacts/ramp/sidecar"
 	@bash "$(MANIFEST_SCRIPTS_DIR)/run-vegeta-ramp.sh" sidecar
 
 vegeta-ramp: vegeta-ramp-nosidecar vegeta-ramp-sidecar vegeta-ramp-plot
