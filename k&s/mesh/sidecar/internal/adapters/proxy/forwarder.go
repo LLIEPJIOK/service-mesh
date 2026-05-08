@@ -1,27 +1,33 @@
 package proxy
 
 import (
+	"bufio"
 	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net"
+	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/LLIEPJIOK/sidecar/internal/domain"
 )
 
 type Forwarder struct {
-	TLSConfig   *tls.Config
-	DialTimeout time.Duration
+	TLSConfig      *tls.Config
+	DialTimeout    time.Duration
+	transportMu    sync.Mutex
+	httpTransports map[string]*http.Transport
 }
 
 func NewForwarder(tlsConfig *tls.Config, dialTimeout time.Duration) *Forwarder {
 	return &Forwarder{
-		TLSConfig:   tlsConfig,
-		DialTimeout: dialTimeout,
+		TLSConfig:      tlsConfig,
+		DialTimeout:    dialTimeout,
+		httpTransports: make(map[string]*http.Transport),
 	}
 }
 
@@ -47,9 +53,14 @@ func (f *Forwarder) Handle(ctx *domain.ConnContext) error {
 	)
 
 	if inMesh {
+		clientReader := bufio.NewReader(ctx.ClientConn)
 		if f.TLSConfig == nil {
 			slog.Error("forward mTLS dial skipped due to missing tls config", slog.String("target", targetAddr))
 			return domain.Wrap(domain.ErrorKindTLS, fmt.Errorf("invalid tls configuration"))
+		}
+
+		if handled, err := f.handleHTTP(ctx, targetAddr, serverName, clientReader); handled {
+			return err
 		}
 
 		targetConn, err = DialMTLS(ctx.Context, targetAddr, serverName, f.TLSConfig, f.DialTimeout)
@@ -63,11 +74,18 @@ func (f *Forwarder) Handle(ctx *domain.ConnContext) error {
 			return err
 		}
 
-		slog.Info(
+		slog.Debug(
 			"forward mTLS dial established",
 			slog.String("target", targetAddr),
 			slog.String("server_name", serverName),
 		)
+
+		defer targetConn.Close()
+		if err := bridgeConnectionsWithReader(ctx.ClientConn, clientReader, targetConn); err != nil {
+			return domain.Wrap(domain.ErrorKindProxy, err)
+		}
+
+		return nil
 	} else {
 		dialer := &net.Dialer{Timeout: f.DialTimeout}
 		targetConn, err = dialer.DialContext(ctx.Context, "tcp", targetAddr)
@@ -85,6 +103,126 @@ func (f *Forwarder) Handle(ctx *domain.ConnContext) error {
 	}
 
 	return nil
+}
+
+func (f *Forwarder) handleHTTP(ctx *domain.ConnContext, targetAddr string, serverName string, reader *bufio.Reader) (bool, error) {
+	if !looksLikeHTTPRequest(ctx.ClientConn, reader) {
+		return false, nil
+	}
+
+	transport := f.httpTransport(serverName)
+	for {
+		request, err := http.ReadRequest(reader)
+		if err != nil {
+			if isStreamTerminationError(err) {
+				return true, nil
+			}
+			return true, domain.Wrap(domain.ErrorKindProxy, err)
+		}
+
+		request.RequestURI = ""
+		request.URL.Scheme = "https"
+		request.URL.Host = targetAddr
+		if request.URL.Path == "" {
+			request.URL.Path = "/"
+		}
+
+		response, err := roundTripHTTP(ctx, transport, request)
+		if err != nil {
+			return true, domain.Wrap(domain.ErrorKindProxy, err)
+		}
+
+		writeErr := response.Write(ctx.ClientConn)
+		closeErr := response.Body.Close()
+		if writeErr != nil {
+			return true, domain.Wrap(domain.ErrorKindProxy, writeErr)
+		}
+		if closeErr != nil {
+			return true, domain.Wrap(domain.ErrorKindProxy, closeErr)
+		}
+
+		if request.Close || response.Close {
+			return true, nil
+		}
+	}
+}
+
+func roundTripHTTP(ctx *domain.ConnContext, transport *http.Transport, request *http.Request) (*http.Response, error) {
+	response, err := transport.RoundTrip(request.WithContext(ctx.Context))
+	if err == nil {
+		return response, nil
+	}
+
+	transport.CloseIdleConnections()
+	if !canReplayHTTPRequest(request) {
+		return nil, err
+	}
+
+	retryRequest := request.Clone(ctx.Context)
+	if request.GetBody != nil {
+		body, bodyErr := request.GetBody()
+		if bodyErr != nil {
+			return nil, err
+		}
+		retryRequest.Body = body
+	}
+
+	return transport.RoundTrip(retryRequest)
+}
+
+func canReplayHTTPRequest(request *http.Request) bool {
+	switch request.Method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions, http.MethodTrace:
+	default:
+		return false
+	}
+
+	return request.Body == nil || request.Body == http.NoBody || request.GetBody != nil
+}
+
+func (f *Forwarder) httpTransport(serverName string) *http.Transport {
+	f.transportMu.Lock()
+	defer f.transportMu.Unlock()
+
+	if transport, ok := f.httpTransports[serverName]; ok {
+		return transport
+	}
+
+	tlsConfig := f.TLSConfig.Clone()
+	tlsConfig.ClientAuth = tls.NoClientCert
+	tlsConfig.ServerName = serverName
+
+	transport := &http.Transport{
+		Proxy:               nil,
+		DialContext:         (&net.Dialer{Timeout: f.DialTimeout, KeepAlive: 30 * time.Second}).DialContext,
+		TLSClientConfig:     tlsConfig,
+		ForceAttemptHTTP2:   false,
+		MaxIdleConns:        1024,
+		MaxIdleConnsPerHost: 256,
+		IdleConnTimeout:     90 * time.Second,
+		TLSHandshakeTimeout: f.DialTimeout,
+		TLSNextProto:        map[string]func(string, *tls.Conn) http.RoundTripper{},
+	}
+	f.httpTransports[serverName] = transport
+	return transport
+}
+
+func looksLikeHTTPRequest(conn net.Conn, reader *bufio.Reader) bool {
+	if err := conn.SetReadDeadline(time.Now().Add(200 * time.Millisecond)); err != nil {
+		return false
+	}
+	prefix, err := reader.Peek(4)
+	_ = conn.SetReadDeadline(time.Time{})
+	if err != nil {
+		return false
+	}
+
+	switch string(prefix) {
+	case "GET ", "POST", "PUT ", "HEAD", "DELE", "PATC", "OPTI":
+		return true
+	default:
+		return false
+	}
 }
 
 func bridgeConnections(clientConn net.Conn, targetConn net.Conn) error {
@@ -112,16 +250,50 @@ func bridgeConnections(clientConn net.Conn, targetConn net.Conn) error {
 	return nil
 }
 
+func bridgeConnectionsWithReader(clientConn net.Conn, clientReader *bufio.Reader, targetConn net.Conn) error {
+	errCh := make(chan error, 2)
+
+	go func() {
+		errCh <- copyStreamFromReader(targetConn, clientReader)
+	}()
+
+	go func() {
+		errCh <- copyStream(clientConn, targetConn)
+	}()
+
+	errFirst := <-errCh
+	errSecond := <-errCh
+
+	if !isStreamTerminationError(errFirst) {
+		return errFirst
+	}
+
+	if !isStreamTerminationError(errSecond) {
+		return errSecond
+	}
+
+	return nil
+}
+
 func copyStream(dst net.Conn, src net.Conn) error {
 	_, err := io.Copy(dst, src)
 	closeWrite(dst)
 	return err
 }
 
+func copyStreamFromReader(dst net.Conn, src *bufio.Reader) error {
+	_, err := io.Copy(dst, src)
+	closeWrite(dst)
+	return err
+}
+
 func closeWrite(conn net.Conn) {
-	tcpConn, ok := conn.(*net.TCPConn)
-	if ok {
-		_ = tcpConn.CloseWrite()
+	type closeWriter interface {
+		CloseWrite() error
+	}
+
+	if writer, ok := conn.(closeWriter); ok {
+		_ = writer.CloseWrite()
 	}
 }
 

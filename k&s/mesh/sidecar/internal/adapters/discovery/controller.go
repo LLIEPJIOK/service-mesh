@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -14,6 +15,8 @@ import (
 
 	"github.com/LLIEPJIOK/sidecar/internal/domain"
 )
+
+const relistInterval = 5 * time.Second
 
 type Controller struct {
 	clientset kubernetes.Interface
@@ -70,10 +73,17 @@ func (c *Controller) watchLoop(ctx context.Context) error {
 	}
 	defer sliceWatch.Stop()
 
+	ticker := time.NewTicker(relistInterval)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-ticker.C:
+			if err := c.relist(ctx); err != nil {
+				return err
+			}
 		case event, ok := <-serviceWatch.ResultChan():
 			if !ok {
 				return domain.Wrap(domain.ErrorKindDiscovery, fmt.Errorf("service watch channel closed"))
