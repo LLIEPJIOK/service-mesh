@@ -38,3 +38,6 @@ k&s/charts/
 
 # MacOS files
 .DS_Store
+
+# Test artifacts
+k&s/test/artifacts/

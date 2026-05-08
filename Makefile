@@ -1,6 +1,8 @@
-.PHONY: help kind-env kind-down kind-clean kind-images-preload kind-images-load \
-	kind-mesh-install kind-bookinfo kind-monitoring kind-status kind-create \
-	mesh-build-all mesh-build-sidecar mesh-build-hook mesh-build-certmanager mesh-build-iptables
+.PHONY: help kind-env kind-env-nosidecar kind-env-sidecar kind-down kind-clean kind-images-preload kind-images-load \
+	kind-mesh-install kind-bookinfo kind-bookinfo-nosidecar kind-monitoring kind-status kind-create \
+	mesh-build-all mesh-build-sidecar mesh-build-hook mesh-build-certmanager mesh-build-iptables \
+	vegeta-bench vegeta-bench-nosidecar vegeta-bench-sidecar vegeta-plot \
+	vegeta-ramp vegeta-ramp-nosidecar vegeta-ramp-sidecar vegeta-ramp-plot
 
 SHELL := /bin/bash
 ROOT_DIR := $(shell pwd)
@@ -21,12 +23,26 @@ help:
 	@echo ""
 	@echo "Kind cluster targets:"
 	@echo "  make kind-env              - Full environment setup (cluster + ingress + images + mesh + bookinfo + monitoring)"
+	@echo "  make kind-env-nosidecar    - Environment without sidecar (bookinfo only)"
+	@echo "  make kind-env-sidecar      - Environment with mesh + sidecar"
 	@echo "  make kind-down             - Delete kind cluster"
 	@echo "  make kind-clean            - Delete cluster and clean up generated files"
 	@echo ""
 	@echo "  make kind-images-preload   - Pull all external images into local Docker (one-time)"
 	@echo "  make kind-images-load      - Load images from local Docker into kind cluster"
 	@echo "  make kind-status           - Show cluster and deployment status"
+	@echo ""
+	@echo "Vegeta benchmark targets:"
+	@echo "  make vegeta-bench          - Run benchmarks (without sidecar, then with sidecar) and plot"
+	@echo "  make vegeta-bench-nosidecar - Run benchmark WITHOUT sidecar"
+	@echo "  make vegeta-bench-sidecar  - Run benchmark WITH sidecar"
+	@echo "  make vegeta-plot           - Generate comparative plots"
+	@echo ""
+	@echo "Vegeta ramp test targets:"
+	@echo "  make vegeta-ramp           - Run ramp tests (nosidecar -> sidecar -> plot)"
+	@echo "  make vegeta-ramp-nosidecar - Run ramp test WITHOUT sidecar"
+	@echo "  make vegeta-ramp-sidecar   - Run ramp test WITH sidecar"
+	@echo "  make vegeta-ramp-plot       - Generate ramp comparison plots"
 	@echo ""
 	@echo "Mesh component targets:"
 	@echo "  make mesh-build-all        - Build all mesh images (sidecar, hook, certmanager, iptables)"
@@ -42,12 +58,6 @@ help:
 	@echo "  DOCKERHUB_NAMESPACE=$(DOCKERHUB_NAMESPACE)"
 	@echo "  KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME)"
 	@echo "  GOARCH=$(GOARCH) (auto-detected: amd64 or arm64)"
-	@echo ""
-	@echo "Examples:"
-	@echo "  make kind-env                              # Full setup"
-	@echo "  VERSION=v0.2.0 make kind-env               # With custom version"
-	@echo "  make kind-down && make kind-env            # Fresh start"
-	@echo "  make kind-images-preload                   # Pre-pull images (one-time)"
 
 kind-env: kind-create install-ingress kind-images-load mesh-build-and-load kind-mesh-install kind-bookinfo kind-monitoring
 	@echo ""
@@ -56,6 +66,22 @@ kind-env: kind-create install-ingress kind-images-load mesh-build-and-load kind-
 	@echo "Bookinfo: http://127.0.0.1/productpage"
 	@echo "Grafana:  http://grafana.127.0.0.1.nip.io (admin/admin)"
 	@echo "Prometheus: kubectl port-forward -n monitoring svc/mesh-monitoring-prometheus 9090:9090"
+	@echo "=========================================="
+
+kind-env-sidecar: kind-create install-ingress kind-images-load mesh-build-and-load kind-mesh-install kind-bookinfo kind-monitoring
+	@echo ""
+	@echo "=========================================="
+	@echo "Environment with sidecar ready!"
+	@echo "Bookinfo: http://127.0.0.1/productpage"
+	@echo "Grafana:  http://grafana.127.0.0.1.nip.io (admin/admin)"
+	@echo "=========================================="
+
+kind-env-nosidecar: kind-create install-ingress kind-images-load kind-bookinfo-nosidecar
+	@echo ""
+	@echo "=========================================="
+	@echo "Environment without sidecar ready!"
+	@echo "Bookinfo: http://127.0.0.1/productpage"
+	@echo "(mesh components NOT installed)"
 	@echo "=========================================="
 
 install-ingress:
@@ -87,6 +113,10 @@ kind-mesh-install: kind-generate-config
 kind-bookinfo:
 	@echo "[make] Deploying Bookinfo..."
 	@bash "$(MANIFEST_SCRIPTS_DIR)/deploy-bookinfo.sh"
+
+kind-bookinfo-nosidecar:
+	@echo "[make] Deploying Bookinfo (no mesh)..."
+	@bash "$(MANIFEST_SCRIPTS_DIR)/deploy-bookinfo-nosidecar.sh"
 
 kind-monitoring:
 	@echo "[make] Installing monitoring..."
@@ -142,3 +172,41 @@ mesh-build-iptables:
 	@echo "[make] Building iptables-init image for $(GOARCH)..."
 	@make -C "$(MESH_DIR)/iptables" docker-build \
 		DOCKERHUB_NAMESPACE=$(DOCKERHUB_NAMESPACE) IMAGE_NAME=iptables-init VERSION=$(VERSION) GOARCH=$(GOARCH)
+
+vegeta-bench-nosidecar:
+	@echo "[make] Running vegeta benchmark WITHOUT sidecar..."
+	@bash "$(MANIFEST_SCRIPTS_DIR)/run-vegeta-comparison.sh" nosidecar
+
+vegeta-bench-sidecar:
+	@echo "[make] Running vegeta benchmark WITH sidecar..."
+	@bash "$(MANIFEST_SCRIPTS_DIR)/run-vegeta-comparison.sh" sidecar
+
+vegeta-bench: vegeta-bench-nosidecar vegeta-bench-sidecar vegeta-plot
+	@echo ""
+	@echo "=========================================="
+	@echo "Benchmark complete! Results in k&s/test/artifacts/"
+	@echo "=========================================="
+
+vegeta-plot:
+	@echo "[make] Generating comparative plots..."
+	@bash "$(MANIFEST_SCRIPTS_DIR)/plot-vegeta-results.sh"
+
+vegeta-ramp-nosidecar:
+	@echo "[make] Running ramp test WITHOUT sidecar..."
+	@mkdir -p "$(ROOT_DIR)/k&s/test/artifacts/ramp/nosidecar"
+	@bash "$(MANIFEST_SCRIPTS_DIR)/run-vegeta-ramp.sh" nosidecar
+
+vegeta-ramp-sidecar:
+	@echo "[make] Running ramp test WITH sidecar..."
+	@mkdir -p "$(ROOT_DIR)/k&s/test/artifacts/ramp/sidecar"
+	@bash "$(MANIFEST_SCRIPTS_DIR)/run-vegeta-ramp.sh" sidecar
+
+vegeta-ramp: vegeta-ramp-nosidecar vegeta-ramp-sidecar vegeta-ramp-plot
+	@echo ""
+	@echo "=========================================="
+	@echo "Ramp test complete!"
+	@echo "=========================================="
+
+vegeta-ramp-plot:
+	@echo "[make] Generating ramp comparison plots..."
+	@bash "$(MANIFEST_SCRIPTS_DIR)/plot-vegeta-ramp.sh"
