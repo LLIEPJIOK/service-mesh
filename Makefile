@@ -2,7 +2,8 @@
 	kind-mesh-install kind-bookinfo kind-bookinfo-nosidecar kind-monitoring kind-status kind-create \
 	mesh-build-all mesh-build-sidecar mesh-build-hook mesh-build-certmanager mesh-build-iptables \
 	vegeta-bench vegeta-bench-nosidecar vegeta-bench-sidecar vegeta-plot \
-	vegeta-ramp vegeta-ramp-nosidecar vegeta-ramp-sidecar vegeta-ramp-plot
+	vegeta-ramp vegeta-ramp-nosidecar vegeta-ramp-sidecar vegeta-ramp-plot \
+	bookinfo-four-way-bench
 
 SHELL := /bin/bash
 ROOT_DIR := $(shell pwd)
@@ -43,6 +44,7 @@ help:
 	@echo "  make vegeta-ramp-nosidecar - Run ramp test WITHOUT sidecar"
 	@echo "  make vegeta-ramp-sidecar   - Run ramp test WITH sidecar"
 	@echo "  make vegeta-ramp-plot       - Generate ramp comparison plots"
+	@echo "  make bookinfo-four-way-bench - Compare no mesh, buffered sidecar, zero-copy sidecar, and Istio"
 	@echo ""
 	@echo "Mesh component targets:"
 	@echo "  make mesh-build-all        - Build all mesh images (sidecar, hook, certmanager, iptables)"
@@ -210,3 +212,7 @@ vegeta-ramp: vegeta-ramp-nosidecar vegeta-ramp-sidecar vegeta-ramp-plot
 vegeta-ramp-plot:
 	@echo "[make] Generating ramp comparison plots..."
 	@bash "$(MANIFEST_SCRIPTS_DIR)/plot-vegeta-ramp.sh"
+
+bookinfo-four-way-bench:
+	@echo "[make] Running Bookinfo four-way benchmark..."
+	@bash "$(MANIFEST_SCRIPTS_DIR)/run-bookinfo-four-way-benchmark.sh"

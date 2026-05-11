@@ -32,6 +32,7 @@ mtls_enabled="true"
 inbound_mtls_port="15001"
 monitoring_enabled="true"
 load_balancer_algorithm="roundRobin"
+copy_mode="${COPY_MODE:-buffered}"
 retry_attempts="3"
 timeout_value="5s"
 circuit_breaker_threshold="5"
@@ -101,6 +102,7 @@ $(indent_pem < "${CA_KEY_FILE}")
     metricsPort: 9090
     monitoringEnabled: ${monitoring_enabled}
     loadBalancerAlgorithm: ${load_balancer_algorithm}
+    copyMode: ${copy_mode}
     retryPolicy:
       attempts: ${retry_attempts}
       backoff:

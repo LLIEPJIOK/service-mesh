@@ -55,6 +55,7 @@ $(indent_pem < "${CA_KEY_FILE}")
     metricsPort: 9090
     monitoringEnabled: true
     loadBalancerAlgorithm: roundRobin
+    copyMode: ${COPY_MODE:-buffered}
     retryPolicy:
       attempts: 3
       backoff:

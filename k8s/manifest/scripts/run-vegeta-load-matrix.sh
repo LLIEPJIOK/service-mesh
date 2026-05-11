@@ -60,7 +60,7 @@ deploy_mode() {
     kubectl delete namespace "${MESH_NAMESPACE}" --ignore-not-found
     kubectl wait --for=delete namespace "${MESH_NAMESPACE}" --timeout=180s >/dev/null 2>&1 || true
 
-    kubectl apply -k "${ROOT_DIR}/app/bookinfo/manifests"
+    kubectl apply -k "${ROOT_DIR}/k8s/app/bookinfo/manifests"
     kubectl label namespace "${BOOKINFO_NAMESPACE}" mesh-injection- --overwrite >/dev/null 2>&1 || true
     return
   fi

@@ -107,7 +107,7 @@ build_component() {
 
   echo "[mesh] Building ${full_image} for linux/${goarch}"
 
-  make -C "${ROOT_DIR}/mesh/${component_dir}" docker-build \
+  make -C "${ROOT_DIR}/k8s/mesh/${component_dir}" docker-build \
     DOCKERHUB_NAMESPACE="${DOCKERHUB_NAMESPACE}" \
     IMAGE_NAME="${image_name}" \
     VERSION="${VERSION}" \
