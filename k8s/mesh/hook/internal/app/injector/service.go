@@ -438,6 +438,7 @@ func (s *Service) buildSidecarContainer(serviceAccountName string, uid int64, ap
 			{Name: "KEY_FILE", Value: "/etc/mesh/certs/tls.key"},
 			{Name: "CA_FILE", Value: "/etc/mesh/ca/ca.crt"},
 			{Name: "LOAD_BALANCER_ALGORITHM", Value: s.cfg.LoadBalancerAlgorithm},
+			{Name: "COPY_MODE", Value: s.cfg.CopyMode},
 			{Name: "RETRY_ATTEMPTS", Value: strconv.Itoa(s.cfg.RetryAttempts)},
 			{Name: "TIMEOUT", Value: s.cfg.ConnectTimeout.String()},
 			{Name: "CIRCUIT_BREAKER_FAILURE_THRESHOLD", Value: strconv.Itoa(s.cfg.CircuitBreakerFailureThreshold)},

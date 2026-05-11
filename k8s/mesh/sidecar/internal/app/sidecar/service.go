@@ -67,7 +67,7 @@ func (s *Service) Run(ctx context.Context) error {
 	}
 	defer closeListeners(listeners)
 
-	forwarder := proxy.NewForwarder(tlsConfig, s.cfg.DialTimeout)
+	forwarder := proxy.NewForwarder(tlsConfig, s.cfg.DialTimeout, proxy.CopyMode(s.cfg.CopyMode))
 	middlewares := []domain.Handler{
 		newMetricsMiddleware(s.metricsRecorder),
 	}

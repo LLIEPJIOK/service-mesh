@@ -183,7 +183,7 @@ func (c *Client) ApplyWebhookTLSSecret(ctx context.Context, namespace string, ce
 
 func (c *Client) ApplySidecarConfigMap(ctx context.Context, cfg config.MeshConfig, namespace string, dryRun bool) error {
 	sidecarYAML := fmt.Sprintf(
-		"inboundPlainPort: %d\noutboundPort: %d\ninboundMTLSPort: %d\nmtlsEnabled: %t\nmetricsPort: %d\nmonitoringEnabled: %t\nloadBalancerAlgorithm: %s\nretryPolicy:\n  attempts: %d\n  backoff:\n    type: %s\n    baseInterval: %s\ntimeout: %s\ncircuitBreakerPolicy:\n  failureThreshold: %d\n  recoveryTime: %s\nexcludeInboundPorts: %s\nexcludeOutboundIPs: %s\n",
+		"inboundPlainPort: %d\noutboundPort: %d\ninboundMTLSPort: %d\nmtlsEnabled: %t\nmetricsPort: %d\nmonitoringEnabled: %t\nloadBalancerAlgorithm: %s\ncopyMode: %s\nretryPolicy:\n  attempts: %d\n  backoff:\n    type: %s\n    baseInterval: %s\ntimeout: %s\ncircuitBreakerPolicy:\n  failureThreshold: %d\n  recoveryTime: %s\nexcludeInboundPorts: %s\nexcludeOutboundIPs: %s\n",
 		cfg.Spec.Sidecar.InboundPlainPort,
 		cfg.Spec.Sidecar.OutboundPort,
 		cfg.Spec.Sidecar.InboundMTLSPort,
@@ -191,6 +191,7 @@ func (c *Client) ApplySidecarConfigMap(ctx context.Context, cfg config.MeshConfi
 		cfg.Spec.Sidecar.MetricsPort,
 		cfg.Spec.Sidecar.MonitoringEnabled,
 		cfg.Spec.Sidecar.LoadBalancerAlgorithm,
+		cfg.Spec.Sidecar.CopyMode,
 		cfg.Spec.Sidecar.RetryPolicy.Attempts,
 		cfg.Spec.Sidecar.RetryPolicy.Backoff.Type,
 		cfg.Spec.Sidecar.RetryPolicy.Backoff.BaseInterval,
@@ -359,6 +360,7 @@ func (c *Client) ApplyWebhookResources(ctx context.Context, cfg config.MeshConfi
 							{Name: "EXCLUDE_OUTBOUND_IPS", Value: cfg.Spec.Sidecar.ExcludeOutboundIPs},
 							{Name: "SIDECAR_UID", Value: "1337"},
 							{Name: "LOAD_BALANCER_ALGORITHM", Value: cfg.Spec.Sidecar.LoadBalancerAlgorithm},
+							{Name: "COPY_MODE", Value: cfg.Spec.Sidecar.CopyMode},
 							{Name: "RETRY_ATTEMPTS", Value: fmt.Sprintf("%d", cfg.Spec.Sidecar.RetryPolicy.Attempts)},
 							{Name: "TIMEOUT", Value: cfg.Spec.Sidecar.Timeout},
 							{Name: "CIRCUIT_BREAKER_FAILURE_THRESHOLD", Value: fmt.Sprintf("%d", cfg.Spec.Sidecar.CircuitBreakerPolicy.FailureThreshold)},

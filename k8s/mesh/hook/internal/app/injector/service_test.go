@@ -228,6 +228,7 @@ func newTestService() *Service {
 		ExcludeOutbound:                "169.254.169.254/32",
 		SidecarUID:                     1337,
 		LoadBalancerAlgorithm:          "roundRobin",
+		CopyMode:                       "buffered",
 		RetryAttempts:                  3,
 		ConnectTimeout:                 5 * time.Second,
 		CircuitBreakerFailureThreshold: 5,

@@ -43,3 +43,11 @@ func TestCloseWriteIgnoresConnectionsWithoutHalfClose(t *testing.T) {
 		t.Fatal("closeWrite blocked on connection without CloseWrite")
 	}
 }
+
+func TestNewForwarderDefaultsToBufferedCopyMode(t *testing.T) {
+	forwarder := NewForwarder(nil, time.Second, "")
+
+	if forwarder.CopyMode != CopyModeBuffered {
+		t.Fatalf("CopyMode = %q, want %q", forwarder.CopyMode, CopyModeBuffered)
+	}
+}

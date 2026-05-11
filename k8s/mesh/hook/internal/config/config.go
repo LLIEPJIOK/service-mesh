@@ -34,6 +34,7 @@ type Config struct {
 	SidecarUID       int64
 
 	LoadBalancerAlgorithm          string
+	CopyMode                       string
 	RetryAttempts                  int
 	ConnectTimeout                 time.Duration
 	CircuitBreakerFailureThreshold int
@@ -73,6 +74,7 @@ func LoadFromEnv() (Config, error) {
 		SidecarUID:       envInt64(1337, "SIDECAR_UID"),
 
 		LoadBalancerAlgorithm:          envString("roundRobin", "LOAD_BALANCER_ALGORITHM"),
+		CopyMode:                       envString("buffered", "COPY_MODE"),
 		RetryAttempts:                  envInt(3, "RETRY_ATTEMPTS"),
 		ConnectTimeout:                 envDuration(5*time.Second, "TIMEOUT"),
 		CircuitBreakerFailureThreshold: envInt(5, "CIRCUIT_BREAKER_FAILURE_THRESHOLD"),
@@ -133,6 +135,12 @@ func (c Config) Validate() error {
 
 	if c.ConnectTimeout < 0 {
 		return fmt.Errorf("TIMEOUT must be non-negative")
+	}
+
+	switch c.CopyMode {
+	case "buffered", "zero-copy":
+	default:
+		return fmt.Errorf("COPY_MODE must be either buffered or zero-copy")
 	}
 
 	if c.CircuitBreakerFailureThreshold < 0 {

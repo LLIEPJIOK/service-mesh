@@ -53,6 +53,7 @@ type SidecarConfig struct {
 	MetricsPort           int            `yaml:"metricsPort"`
 	MonitoringEnabled     bool           `yaml:"monitoringEnabled"`
 	LoadBalancerAlgorithm string         `yaml:"loadBalancerAlgorithm"`
+	CopyMode              string         `yaml:"copyMode"`
 	RetryPolicy           RetryPolicy    `yaml:"retryPolicy"`
 	Timeout               string         `yaml:"timeout"`
 	CircuitBreakerPolicy  CircuitBreaker `yaml:"circuitBreakerPolicy"`
@@ -130,6 +131,9 @@ func (c *MeshConfig) ApplyDefaults() {
 	if strings.TrimSpace(c.Spec.Sidecar.LoadBalancerAlgorithm) == "" {
 		c.Spec.Sidecar.LoadBalancerAlgorithm = "roundRobin"
 	}
+	if strings.TrimSpace(c.Spec.Sidecar.CopyMode) == "" {
+		c.Spec.Sidecar.CopyMode = "buffered"
+	}
 
 	if c.Spec.Sidecar.MTLSEnabled == nil {
 		if c.Spec.Sidecar.InboundMTLSPort == 0 {
@@ -206,6 +210,12 @@ func (c MeshConfig) Validate() error {
 
 	if c.Spec.Sidecar.MTLSEnabledValue() && c.Spec.Sidecar.InboundMTLSPort <= 0 {
 		return fmt.Errorf("spec.sidecar.inboundMTLSPort must be positive when spec.sidecar.mtlsEnabled=true")
+	}
+
+	switch c.Spec.Sidecar.CopyMode {
+	case "buffered", "zero-copy":
+	default:
+		return fmt.Errorf("spec.sidecar.copyMode must be either buffered or zero-copy")
 	}
 
 	if strings.TrimSpace(c.Spec.Certificates.RootCA.Cert) == "" || strings.TrimSpace(c.Spec.Certificates.RootCA.Key) == "" {

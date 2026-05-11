@@ -19,14 +19,27 @@ import (
 type Forwarder struct {
 	TLSConfig      *tls.Config
 	DialTimeout    time.Duration
+	CopyMode       CopyMode
 	transportMu    sync.Mutex
 	httpTransports map[string]*http.Transport
 }
 
-func NewForwarder(tlsConfig *tls.Config, dialTimeout time.Duration) *Forwarder {
+type CopyMode string
+
+const (
+	CopyModeBuffered CopyMode = "buffered"
+	CopyModeZeroCopy CopyMode = "zero-copy"
+)
+
+func NewForwarder(tlsConfig *tls.Config, dialTimeout time.Duration, copyMode CopyMode) *Forwarder {
+	if copyMode == "" {
+		copyMode = CopyModeBuffered
+	}
+
 	return &Forwarder{
 		TLSConfig:      tlsConfig,
 		DialTimeout:    dialTimeout,
+		CopyMode:       copyMode,
 		httpTransports: make(map[string]*http.Transport),
 	}
 }
@@ -81,7 +94,7 @@ func (f *Forwarder) Handle(ctx *domain.ConnContext) error {
 		)
 
 		defer targetConn.Close()
-		if err := bridgeConnectionsWithReader(ctx.ClientConn, clientReader, targetConn); err != nil {
+		if err := bridgeConnectionsWithReader(ctx.ClientConn, clientReader, targetConn, f.CopyMode); err != nil {
 			return domain.Wrap(domain.ErrorKindProxy, err)
 		}
 
@@ -98,7 +111,7 @@ func (f *Forwarder) Handle(ctx *domain.ConnContext) error {
 	}
 	defer targetConn.Close()
 
-	if err := bridgeConnections(ctx.ClientConn, targetConn); err != nil {
+	if err := bridgeConnections(ctx.ClientConn, targetConn, f.CopyMode); err != nil {
 		return domain.Wrap(domain.ErrorKindProxy, err)
 	}
 
@@ -225,15 +238,15 @@ func looksLikeHTTPRequest(conn net.Conn, reader *bufio.Reader) bool {
 	}
 }
 
-func bridgeConnections(clientConn net.Conn, targetConn net.Conn) error {
+func bridgeConnections(clientConn net.Conn, targetConn net.Conn, copyMode CopyMode) error {
 	errCh := make(chan error, 2)
 
 	go func() {
-		errCh <- copyStream(targetConn, clientConn)
+		errCh <- copyStream(targetConn, clientConn, copyMode)
 	}()
 
 	go func() {
-		errCh <- copyStream(clientConn, targetConn)
+		errCh <- copyStream(clientConn, targetConn, copyMode)
 	}()
 
 	errFirst := <-errCh
@@ -250,15 +263,15 @@ func bridgeConnections(clientConn net.Conn, targetConn net.Conn) error {
 	return nil
 }
 
-func bridgeConnectionsWithReader(clientConn net.Conn, clientReader *bufio.Reader, targetConn net.Conn) error {
+func bridgeConnectionsWithReader(clientConn net.Conn, clientReader *bufio.Reader, targetConn net.Conn, copyMode CopyMode) error {
 	errCh := make(chan error, 2)
 
 	go func() {
-		errCh <- copyStreamFromReader(targetConn, clientReader)
+		errCh <- copyStreamFromReader(targetConn, clientReader, copyMode)
 	}()
 
 	go func() {
-		errCh <- copyStream(clientConn, targetConn)
+		errCh <- copyStream(clientConn, targetConn, copyMode)
 	}()
 
 	errFirst := <-errCh
@@ -275,16 +288,57 @@ func bridgeConnectionsWithReader(clientConn net.Conn, clientReader *bufio.Reader
 	return nil
 }
 
-func copyStream(dst net.Conn, src net.Conn) error {
-	_, err := io.Copy(dst, src)
+func copyStream(dst net.Conn, src net.Conn, copyMode CopyMode) error {
+	if copyMode == CopyModeZeroCopy {
+		if copied, err := copyStreamZeroCopy(dst, src); copied {
+			closeWrite(dst)
+			return err
+		}
+	}
+
+	_, err := copyStreamBuffered(dst, src)
 	closeWrite(dst)
 	return err
 }
 
-func copyStreamFromReader(dst net.Conn, src *bufio.Reader) error {
-	_, err := io.Copy(dst, src)
+func copyStreamFromReader(dst net.Conn, src *bufio.Reader, copyMode CopyMode) error {
+	if src.Buffered() > 0 {
+		if _, err := copyStreamBuffered(dst, io.LimitReader(src, int64(src.Buffered()))); err != nil {
+			closeWrite(dst)
+			return err
+		}
+	}
+
+	_, err := copyStreamBuffered(dst, src)
 	closeWrite(dst)
 	return err
+}
+
+type plainReader struct {
+	io.Reader
+}
+
+type plainWriter struct {
+	io.Writer
+}
+
+func copyStreamBuffered(dst io.Writer, src io.Reader) (int64, error) {
+	return io.CopyBuffer(plainWriter{Writer: dst}, plainReader{Reader: src}, make([]byte, 32*1024))
+}
+
+func copyStreamZeroCopy(dst net.Conn, src net.Conn) (bool, error) {
+	tcpDst, ok := dst.(*net.TCPConn)
+	if !ok {
+		return false, nil
+	}
+
+	tcpSrc, ok := src.(*net.TCPConn)
+	if !ok {
+		return false, nil
+	}
+
+	_, err := tcpDst.ReadFrom(tcpSrc)
+	return true, err
 }
 
 func closeWrite(conn net.Conn) {

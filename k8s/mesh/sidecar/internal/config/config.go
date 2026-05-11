@@ -30,6 +30,7 @@ type Config struct {
 	RetryPolicy RetryPolicy
 	Timeout     time.Duration
 	DialTimeout time.Duration
+	CopyMode    string
 
 	CircuitBreakerPolicy CircuitBreakerPolicy
 
@@ -93,6 +94,7 @@ func LoadFromEnv() (Config, error) {
 		},
 		Timeout:     timeout,
 		DialTimeout: dialTimeout,
+		CopyMode:    envStringWithAliases("buffered", "COPY_MODE", "SIDECAR_COPY_MODE"),
 		CircuitBreakerPolicy: CircuitBreakerPolicy{
 			FailureThreshold: envUint32WithAliases(5, "CIRCUIT_BREAKER_FAILURE_THRESHOLD", "SIDECAR_CIRCUIT_BREAKER_FAILURE_THRESHOLD"),
 			RecoveryTime:     envDurationWithAliases(30*time.Second, "CIRCUIT_BREAKER_RECOVERY_TIME", "SIDECAR_CIRCUIT_BREAKER_RECOVERY_TIME"),
@@ -152,6 +154,12 @@ func (c Config) Validate() error {
 
 	if c.DialTimeout <= 0 {
 		return fmt.Errorf("dial timeout must be positive")
+	}
+
+	switch c.CopyMode {
+	case "buffered", "zero-copy":
+	default:
+		return fmt.Errorf("unsupported copy mode %q", c.CopyMode)
 	}
 
 	if c.ShutdownTimeout <= 0 {
